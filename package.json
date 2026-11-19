@@ -18,6 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:db:pitwall-share": "node supabase/tests/personal-pitwall-share.test.mjs",
+    "test:db:pitwall-fence": "node supabase/tests/personal-pitwall-session-fence.test.mjs",
+    "test:browser:pitwall-share": "node scripts/personal-pitwall-share-browser.mjs",
     "smoke:iracing-catalog": "bash scripts/ensure-playwright-runtime.sh node scripts/iracing-catalog-visual-smoke.mjs",
     "simhub:bridge": "node tools/simhub-bridge/server.mjs",
     "simhub:simulate": "node tools/simhub-bridge/simulate.mjs",

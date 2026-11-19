@@ -4,6 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Bearer-token bootstrap: MUST stay the first executable script on the
+         page. The public Pitwall token lives in the fragment; this takes it
+         into a one-shot closure and removes it from the address bar before any
+         analytics, logger or application module can observe location.href.
+         No storage/cookie is used. -->
+    <script>
+      (function () {
+        try {
+          var raw = (location.hash || "").replace(/^#/, "");
+          if (!raw) return;
+          var token = new URLSearchParams(raw).get("t") || "";
+          if (!/^[0-9a-f]{64}$/.test(token)) return;
+          window.__3smTakeShareToken = (function (value) {
+            return function () {
+              var once = value;
+              value = null;
+              return once;
+            };
+          })(token);
+          history.replaceState(null, "", location.pathname + location.search);
+        } catch (error) {
+          /* A malformed fragment must not break the page. */
+        }
+      })();
+    </script>
+
+
     <title>3 Stripe Motorsport - iRacing League</title>
     <meta name="description" content="De officiële 3 Stripe Motorsport sim racing league. Race mee in onze competities, bekijk de kalender, standen, teams, coureurs en uitslagen." />
     <meta name="author" content="3 Stripe Motorsport" />

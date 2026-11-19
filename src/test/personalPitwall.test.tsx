@@ -66,6 +66,7 @@ const v3 = {
     carName: "Porsche 911 GT3 R",
     trackName: "Spa-Francorchamps",
     trackConfig: "Endurance",
+    trackId: 42,
   },
   session: { isInCar: true, sessionTimeSeconds: 1200, sessionTimeRemainingSeconds: 3600, sessionState: "racing", flags: [] },
   timing: { lastLapTimeSeconds: 102.4, bestLapTimeSeconds: 101.8, completedLaps: 18 },
@@ -175,14 +176,54 @@ const device = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const token = "a".repeat(64);
+const sectorTimes = [37.9, 41.0, 38.8];
+const sectorCar = (id: string, offset = 0) => ({
+  id,
+  sectorCount: 3,
+  sectors: sectorTimes.map((seconds, sectorIndex) => ({
+    id,
+    sectorIndex,
+    sectorCount: 3,
+    lap: 18,
+    seconds: seconds + offset,
+    status: "verified" as const,
+    referenceSeconds: seconds + offset + 0.2,
+    revision: 1,
+    completedSessionTimeSeconds: 1170,
+    observedSessionTimeSeconds: 1200,
+  })),
+  sectorBests: sectorTimes.map((seconds, sectorIndex) => ({
+    sectorIndex,
+    lap: 18,
+    seconds: seconds + offset,
+  })),
+  metrics: {
+    observedSessionTimeSeconds: 1200,
+    lastLapSeconds: sectorTimes.reduce((a, b) => a + b, 0) + offset,
+    bestLapSeconds: sectorTimes.reduce((a, b) => a + b, 0) + offset,
+    sectorCount: 3,
+    sectorLap: 18,
+    lapValid: true,
+    sectorSource: "measured" as const,
+    sectorErrorSeconds: 0,
+  },
+});
+
 const sharedRace = (overrides: Partial<SharedRace> = {}): SharedRace => ({
   ok: true,
   created_at: nowIso,
   expires_at: new Date(Date.now() + 3600_000).toISOString(),
   updated_at: nowIso,
+  circuit: { trackId: 42, name: "Spa-Francorchamps", config: "Endurance" },
   track: { name: "Spa-Francorchamps", config: "Endurance" },
   session: { driver: "Vincent", car: "Porsche 911 GT3 R", state: "racing" },
   v3: v3 as SharedRace["v3"],
+  sectors: {
+    available: true,
+    reason: null,
+    sectorCount: 3,
+    cars: [sectorCar("o1"), sectorCar("o2", 0.3)],
+  },
   laps: [{ lap: 17, seconds: 102.1 }, { lap: 18, seconds: 102.4 }],
   pace: { fastest: 102.1, median: 102.3, count: 2 },
   ...overrides,
@@ -243,6 +284,36 @@ describe("personal Pitwall owner", () => {
     expect(await screen.findByText("Nog geen connector gevonden")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /SimHub koppelen/i })).toHaveAttribute("href", "/simhub-koppelen");
     expect(screen.queryByText("Deel deze race")).not.toBeInTheDocument();
+  });
+
+  it("toont op het eigen dashboard dezelfde kaart en gecontroleerde sectoren", async () => {
+    const d = detailFor("dev-1", "Mijn PC");
+    d.telemetry.v3_normalized = {
+      ...v3,
+      identity: { ...v3.identity, trackId: 42 },
+      paceHistory: {
+        schemaRevision: 1,
+        observedSessionId: "sim-s5",
+        segmentId: "segment-owner",
+        transportSessionId: "sess-owner-1",
+        updatedAt: nowIso,
+        cars: [sectorCar("o1"), sectorCar("o2", 0.3)],
+      },
+    } as unknown as typeof d.telemetry.v3_normalized;
+    h.detail = d;
+    renderPage(<PersonalPitwallPage />);
+    expect(await screen.findByText("MIJN PITWALL")).toBeInTheDocument();
+    expect(document.querySelector('[data-ptp-sectors="known"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-sector-status="verified"]').length).toBeGreaterThanOrEqual(3);
+    expect(document.querySelector('[data-ptp-circuit="true"]')).not.toBeNull();
+  });
+
+  it("legt uit waarom een sessie niet deelbaar is", async () => {
+    h.devices = [device({ shareable: false, shareable_reason: "session_unproven" })];
+    renderPage(<PersonalPitwallPage />);
+    expect(await screen.findByRole("heading", { name: "Deel deze race" })).toBeInTheDocument();
+    expect(screen.getByText(/simulatorsessie kan niet met zekerheid/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Deel deze race/i })).toBeDisabled();
   });
 
   it("kiest één verse connector automatisch en toont dezelfde premiumweergave", async () => {
@@ -346,6 +417,35 @@ describe("personal Pitwall public viewer", () => {
     expect(screen.queryByText("Delen stoppen")).not.toBeInTheDocument();
     expect(screen.queryByText("Profielen")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Deel deze race/i })).not.toBeInTheDocument();
+  });
+
+  it("toont kaart en gecontroleerde sectortijden uit de publieke projectie", async () => {
+    window.history.replaceState(null, "", `/pitwall/shared#t=${token}`);
+    h.readSharedRace.mockResolvedValue(sharedRace());
+    renderPage(<PersonalPitwallSharePage />);
+    expect(await screen.findByText("LIVE PITWALL")).toBeInTheDocument();
+    expect(document.querySelector('[data-ptp-circuit-status="available"]')).not.toBeNull();
+    expect(document.querySelector('[data-ptp-sectors-status="available"]')).not.toBeNull();
+    expect(screen.getByText(/sectoren S1–S3/)).toBeInTheDocument();
+    expect(document.querySelector('[data-ptp-sectors="known"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-sector-status="verified"]').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByText("37.900").length).toBeGreaterThan(0);
+  });
+
+  it("zegt expliciet dat sectoren ontbreken in plaats van een indeling te verzinnen", async () => {
+    window.history.replaceState(null, "", `/pitwall/shared#t=${token}`);
+    h.readSharedRace.mockResolvedValue(
+      sharedRace({
+        circuit: { trackId: null, name: "Spa-Francorchamps", config: "Endurance" },
+        sectors: { available: false, reason: "no_sector_data", sectorCount: 0, cars: [] },
+      }),
+    );
+    renderPage(<PersonalPitwallSharePage />);
+    expect(await screen.findByText("LIVE PITWALL")).toBeInTheDocument();
+    expect(document.querySelector('[data-ptp-circuit-status="unavailable"]')).not.toBeNull();
+    expect(document.querySelector('[data-ptp-sectors-status="unavailable"]')).not.toBeNull();
+    expect(screen.getByText(/sectortijden niet beschikbaar/)).toBeInTheDocument();
+    expect(document.querySelector('[data-ptp-sectors="unknown"]')).not.toBeNull();
   });
 
   it("ondersteunt focus/fullscreen ook op de publieke pagina", async () => {

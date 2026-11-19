@@ -16,7 +16,12 @@ import type { TyreModelState } from "@/features/endurance/pitwall/useTyreModel";
 import { PitwallPremiumView } from "@/features/endurance/pitwall/test-premium/PitwallPremiumView";
 import { PremiumFocusBar } from "@/features/endurance/pitwall/test-premium/PremiumFocusBar";
 import { usePitwallFocus } from "@/features/endurance/pitwall/test-premium/usePitwallFocus";
-import { readShareToken, readSharedRace, stripShareTokenFromAddress, type SharedRace } from "@/features/personal-pitwall/share";
+import {
+  readSharedRace,
+  sharedViewerV3,
+  takeShareTokenForPage,
+  type SharedRace,
+} from "@/features/personal-pitwall/share";
 import "./personalPitwall.css";
 
 const POLL_MS = 2_000;
@@ -131,11 +136,7 @@ const StatusPanel = ({
 );
 
 export default function PersonalPitwallSharePage() {
-  const [token] = useState<string | null>(() => {
-    const value = readShareToken(window.location.hash);
-    stripShareTokenFromAddress();
-    return value;
-  });
+  const [token] = useState<string | null>(() => takeShareTokenForPage());
   const [state, setState] = useState<ShareState>(token ? "loading" : "no-token");
   const [snapshot, setSnapshot] = useState<SharedRace | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -204,7 +205,7 @@ export default function PersonalPitwallSharePage() {
     };
   }, [token, reloadKey]);
 
-  const v3 = (snapshot?.v3 ?? null) as V3Normalized | null;
+  const v3 = useMemo(() => (snapshot ? sharedViewerV3(snapshot) : null) as V3Normalized | null, [snapshot]);
   const detail = useMemo(() => (snapshot ? sharedDetail(snapshot) : null), [snapshot]);
   const live = Boolean(snapshot) && isTelemetryLive(snapshot!.updated_at);
   const strategy = useMemo(() => deviceStrategyRow(live ? v3 : null), [v3, live]);
@@ -333,6 +334,24 @@ export default function PersonalPitwallSharePage() {
                 {relTime(snapshot.updated_at)}
                 <span>·</span>
                 link verloopt {new Date(snapshot.expires_at).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
+                <span
+                  data-ptp-circuit-status={snapshot.circuit?.trackId != null ? "available" : "unavailable"}
+                  title={snapshot.circuit?.trackId != null ? "Officiële circuitgeometrie beschikbaar" : "Officiële circuitgeometrie niet beschikbaar"}
+                >
+                  · {snapshot.circuit?.trackId != null ? "circuitkaart" : "circuitkaart niet beschikbaar"}
+                </span>
+                <span
+                  data-ptp-sectors-status={snapshot.sectors?.available ? "available" : "unavailable"}
+                  title={
+                    snapshot.sectors?.available
+                      ? "Sectortijden uit de gedeelde sessie"
+                      : "Geen gecontroleerde sectortijden voor deze sessie"
+                  }
+                >
+                  · {snapshot.sectors?.available
+                    ? `sectoren S1–S${snapshot.sectors.sectorCount}`
+                    : "sectortijden niet beschikbaar"}
+                </span>
                 <button
                   type="button"
                   data-pitwall-focus-entry="true"

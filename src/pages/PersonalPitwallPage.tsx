@@ -67,6 +67,24 @@ const isDeviceOnline = (row: MyPitwallDevice): boolean =>
 const isHealthOnline = (iso?: string | null): boolean =>
   Boolean(iso && Date.now() - Date.parse(iso) <= ONLINE_WINDOW_MS);
 
+const shareBlockedText = (reason?: MyPitwallDevice["shareable_reason"]): string => {
+  switch (reason) {
+    case "not_fresh":
+      return "De connector is niet meer vers. Wacht op een nieuw telemetrieframe.";
+    case "no_session":
+    case "no_track":
+      return "De connector meldt nog geen herkenbare sessie op een circuit.";
+    case "session_ended":
+      return "De sessie is afgelopen; delen kan pas in een nieuwe actieve sessie.";
+    case "session_inactive":
+      return "De auto staat stil of je bent niet in de auto. Deel alleen tijdens een actieve sessie.";
+    case "session_unproven":
+      return "De simulatorsessie kan niet met zekerheid worden vastgesteld. Delen blijft uit veiligheid uit.";
+    default:
+      return "Delen kan zodra je connector een verse, actieve racesessie doorgeeft.";
+  }
+};
+
 function PersonalDeviceDock({
   rows,
   selectedId,
@@ -177,7 +195,7 @@ function ShareBar({
             className="pp-share-primary"
             onClick={onShare}
             disabled={busy || !device.shareable}
-            title={device.shareable ? "Maak een verse, geheim deelbare link" : "Deel alleen tijdens een verse, actieve sessie"}
+            title={device.shareable ? "Maak een verse, geheim deelbare link" : shareBlockedText(device.shareable_reason)}
           >
             {busy ? <Loader2 className="animate-spin" aria-hidden size={15} /> : <Share2 aria-hidden size={15} />}
             Deel deze race
@@ -218,7 +236,7 @@ function ShareBar({
         </p>
       )}
       {!device.shareable && !active && (
-        <p className="pp-share-hint">Delen kan zodra je connector een verse, actieve racesessie doorgeeft.</p>
+        <p className="pp-share-hint">{shareBlockedText(device.shareable_reason)}</p>
       )}
       {error && <p role="alert" className="pp-share-error">{error}</p>}
     </section>
@@ -386,7 +404,13 @@ export default function PersonalPitwallPage() {
     try {
       const result = await createPersonalShare(deviceId);
       if (!("token" in result)) {
-        setShareError(result.code === "not_fresh" ? "De connector is niet meer vers genoeg. Wacht op een nieuw telemetrieframe." : "Delen is nu niet beschikbaar voor deze sessie.");
+        setShareError(
+          result.code === "not_fresh"
+            ? "De connector is niet meer vers genoeg. Wacht op een nieuw telemetrieframe."
+            : result.code === "session_unproven"
+              ? "De simulatorsessie kan niet met zekerheid worden vastgesteld; delen is uit veiligheid geweigerd."
+              : "Delen is nu niet beschikbaar voor deze sessie.",
+        );
         return;
       }
       setShareUrl(buildShareUrl(result.token));

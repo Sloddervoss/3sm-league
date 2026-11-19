@@ -2,6 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { SimHubDeviceDetail } from "@/features/control-room/connectors/types";
 import type { V3Normalized } from "@/features/endurance/pitwall/pitwallHelpers";
+import type { PaceCar, PaceHistory } from "../../../supabase/functions/_shared/paceCapture";
+import { takeCapturedShareToken } from "@/lib/shareTokenBootstrap";
 
 /**
  * Personal Pitwall share transport.
@@ -10,8 +12,9 @@ import type { V3Normalized } from "@/features/endurance/pitwall/pitwallHelpers";
  * deliberately separate client with auth persistence, URL detection and token
  * refresh disabled: a spectator page must never reuse an owner's browser
  * session or trigger private queries. The bearer token lives only in memory;
- * it is read from the URL fragment and immediately removed from the address
- * bar so it cannot leak through Referer, history sync, analytics or caches.
+ * the inline head bootstrap in index.html and main.tsx remove it from the
+ * address bar before any app/analytics module loads, so it cannot leak through
+ * Referer, history sync, analytics or caches.
  */
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -51,6 +54,11 @@ export interface MyPitwallDevice {
   driver_name: string | null;
   session_state: string | null;
   shareable: boolean;
+  /**
+   * Why sharing is unavailable. The server is the source of truth; the UI only
+   * explains it. null/undefined means shareable.
+   */
+  shareable_reason?: "not_fresh" | "no_session" | "no_track" | "session_ended" | "session_inactive" | "session_unproven" | null;
   share_active: boolean;
   share_created_at: string | null;
   share_expires_at: string | null;
@@ -77,11 +85,41 @@ export interface SharedRace {
   created_at: string;
   expires_at: string;
   updated_at: string;
+  circuit?: { trackId: number | null; name: string; config: string | null };
   track: { name: string; config: string | null };
   session: { driver: string | null; car: string | null; state: string | null };
   v3: Partial<V3Normalized>;
+  /**
+   * Bounded, whitelisted public sector projection. Keys match v3.opponents[].id
+   * (stable pseudonymous car keys). `available:false` is an explicit statement,
+   * never a guess.
+   */
+  sectors?: {
+    available: boolean;
+    reason: string | null;
+    sectorCount: number;
+    cars: SharedSectorCar[];
+  };
   laps: Array<{ lap: number; seconds: number }>;
   pace: { fastest: number | null; median: number | null; count: number } | null;
+}
+
+export interface SharedSectorCar {
+  id: string;
+  sectorCount: number | null;
+  sectors: Array<{
+    sectorIndex: number;
+    sectorCount: number;
+    lap: number;
+    seconds: number | null;
+    status: "provisional" | "verified" | "invalidated";
+    referenceSeconds: number | null;
+    revision: number | null;
+    completedSessionTimeSeconds: number | null;
+    observedSessionTimeSeconds: number | null;
+  }>;
+  sectorBests: Array<{ sectorIndex: number; lap: number | null; seconds: number }>;
+  metrics?: Record<string, unknown> | null;
 }
 
 export type SharedRaceResult = SharedRace | { ok: false; code: "invalid" | "ended" | "stale" | "waiting" | string };
@@ -95,20 +133,20 @@ const asRpcError = (error: unknown): Error => {
 };
 
 export async function listMyPitwallDevices(): Promise<MyPitwallDevices> {
-  const { data, error } = await ownerRpc("pitwall_my_devices_v1");
+  const { data, error } = await ownerRpc("pitwall_my_devices_v2");
   if (error) throw asRpcError(error);
   const payload = data as MyPitwallDevices | null;
   return { devices: Array.isArray(payload?.devices) ? payload.devices : [] };
 }
 
 export async function loadOwnerDeviceDetail(deviceId: string): Promise<SimHubDeviceDetail> {
-  const { data, error } = await ownerRpc("pitwall_owner_device_detail_v1", { p_device_id: deviceId });
+  const { data, error } = await ownerRpc("pitwall_owner_device_detail_v2", { p_device_id: deviceId });
   if (error) throw asRpcError(error);
   return data as SimHubDeviceDetail;
 }
 
 export async function createPersonalShare(deviceId: string, ttlSeconds = 14400): Promise<ShareCreateResult> {
-  const { data, error } = await ownerRpc("pitwall_share_create_v1", {
+  const { data, error } = await ownerRpc("pitwall_share_create_v2", {
     p_device_id: deviceId,
     p_ttl_seconds: ttlSeconds,
   });
@@ -128,7 +166,7 @@ export async function revokePersonalShare(deviceId: string): Promise<{ ok: boole
  * data immediately instead of leaving a stale dashboard on screen.
  */
 export async function readSharedRace(token: string): Promise<SharedRaceResult> {
-  const { data, error } = await anonRpc("pitwall_shared_snapshot_v1", { p_token: token });
+  const { data, error } = await anonRpc("pitwall_shared_snapshot_v2", { p_token: token });
   if (error) throw asRpcError(error);
   return data as SharedRaceResult;
 }
@@ -149,6 +187,74 @@ export function stripShareTokenFromAddress(): void {
 
 export function buildShareUrl(token: string, origin = window.location.origin): string {
   return `${origin}/pitwall/shared#t=${token}`;
+}
+
+/**
+ * One-shot token for the shared page. main.tsx already consumed the inline
+ * head bootstrap before the app module graph loaded; this is the fallback for
+ * direct rendering and tests. The fragment is always removed.
+ */
+export function takeShareTokenForPage(): string | null {
+  const captured = takeCapturedShareToken();
+  if (captured) return captured;
+  const token = readShareToken(window.location.hash);
+  stripShareTokenFromAddress();
+  return token;
+}
+
+/**
+ * Rebuild the viewer V3 from the server's bounded public sector projection.
+ *
+ * The server deliberately does not send `paceHistory` or the reusable
+ * transport id. Only the whitelisted sector board is lifted into the existing
+ * timing components, with the already-pseudonymous car keys. When the board is
+ * unavailable the base V3 is returned unchanged and the UI states that sectors
+ * are unavailable instead of inventing a layout.
+ */
+export function sharedViewerV3(snapshot: SharedRace): V3Normalized {
+  const base = (snapshot.v3 ?? {}) as V3Normalized;
+  const board = snapshot.sectors;
+  if (!board?.available || !Array.isArray(board.cars) || board.cars.length === 0) return base;
+
+  const updatedAt = Number.isFinite(Date.parse(snapshot.updated_at))
+    ? snapshot.updated_at
+    : new Date().toISOString();
+
+  const cars: PaceCar[] = board.cars
+    .filter((car) => typeof car?.id === "string" && car.id.length > 0 && car.id.length <= 64)
+    .map((car) => {
+      const metrics = car.metrics && typeof car.metrics === "object"
+        ? ({ id: car.id, ...car.metrics } as unknown as PaceCar["metrics"])
+        : undefined;
+      return {
+        id: car.id,
+        laps: [],
+        traces: [],
+        sectors: Array.isArray(car.sectors)
+          ? car.sectors.map((sector) => ({ ...sector, id: car.id })) as PaceCar["sectors"]
+          : [],
+        sectorBests: Array.isArray(car.sectorBests) ? car.sectorBests as PaceCar["sectorBests"] : [],
+        ...(metrics ? { metrics } : {}),
+      };
+    });
+
+  if (cars.length === 0) return base;
+
+  const history: PaceHistory = {
+    schemaRevision: 1,
+    // Local sentinel values only; they are never sent back to the server.
+    observedSessionId: "shared",
+    segmentId: "shared",
+    transportSessionId: "shared",
+    updatedAt,
+    cars,
+  };
+
+  return {
+    ...base,
+    transportSessionId: "shared",
+    paceHistory: history,
+  };
 }
 
 /** Clipboard with a legacy fallback for browsers without the async API. */

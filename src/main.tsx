@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import App from "./App.tsx";
+import { captureShareTokenFromLocation } from "./lib/shareTokenBootstrap";
 import "./index.css";
 
 /* Vite preload error handler — diagnostic logging + controlled single reload */
@@ -58,4 +58,14 @@ declare global {
 }
 window.__3smAppStarted = true;
 
-createRoot(document.getElementById("root")!).render(<App />);
+// The fragment token is captured and stripped before the application module
+// graph loads. App (and any future analytics imported there) can never observe
+// the bearer token in location.href.
+captureShareTokenFromLocation();
+
+const start = async () => {
+  const { default: App } = await import("./App.tsx");
+  createRoot(document.getElementById("root")!).render(<App />);
+};
+
+void start();
