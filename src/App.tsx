@@ -34,6 +34,8 @@ const JoinPage = lazy(() => import("./pages/JoinPage.tsx"));
 const EndurancePage = lazy(() => import("./features/endurance/shell/EndurancePage.tsx"));
 const StewardPage = lazy(() => import("./pages/StewardPage.tsx"));
 const PitwallDeviceTestPage = lazy(() => import("./pages/PitwallDeviceTestPage.tsx"));
+const PersonalPitwallPage = lazy(() => import("./pages/PersonalPitwallPage.tsx"));
+const PersonalPitwallSharePage = lazy(() => import("./pages/PersonalPitwallSharePage.tsx"));
 const NewsEditorPage = lazy(() => import("./pages/NewsEditorPage.tsx"));
 const AuthPage = lazy(() => import("./pages/AuthPage.tsx"));
 const CommunitySupportPage = lazy(() => import("./features/community-support/public/CommunitySupportPage.tsx"));
@@ -112,6 +114,9 @@ const App = () => (
                     <Route path="/admin/track-intelligence" element={<TrackIntelligenceTestPage />} />
                     <Route path="/admin/track-intelligence-test" element={<TrackIntelligenceTestPage />} />
                     <Route path="/admin/pitwall-test" element={<PitwallDeviceTestPage />} />
+                    {/* Persoonlijke premium Pitwall. De vaste auth-return is /pitwall/. */}
+                    <Route path="/pitwall" element={<PersonalPitwallPage />} />
+                    <Route path="/pitwall/shared" element={<PersonalPitwallSharePage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/koppel" element={<KoppelPage />} />
                     <Route path="/simhub-koppelen" element={<SimHubPairingPage />} />

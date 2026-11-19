@@ -50,6 +50,14 @@ export interface PitwallPremiumViewProps {
   contextKey: string;
   gap: boolean;
   lastSeen: string;
+  /**
+   * Publieke meekijkstand. Dezelfde premiumindeling, maar zonder rondes-archief,
+   * pitbevestiging, bandenmodel of ruwe telemetrie. Die blokken hangen aan
+   * owner-only queries/mutaties en horen niet op een gedeelde link.
+   */
+  readOnly?: boolean;
+  /** Koplabel; de testroute laat de bestaande tekst staan. */
+  tag?: string;
 }
 
 /**
@@ -84,6 +92,8 @@ export function PitwallPremiumView({
   contextKey,
   gap,
   lastSeen,
+  readOnly = false,
+  tag = "PITWALL TEST",
 }: PitwallPremiumViewProps) {
   // Driver names, online state and metric freshness must not reshape this layout.
   const sectorContext = JSON.stringify([
@@ -128,6 +138,7 @@ export function PitwallPremiumView({
         state={state}
         sectorCount={sectorCount}
         refreshing={refreshing}
+        tag={tag}
       />
 
       <div className="ptp-kpi" data-ptp-sectors={sectorCount > 0 ? "known" : "unknown"}>
@@ -172,7 +183,7 @@ export function PitwallPremiumView({
         {panel(
           "pace",
           <PacePanel
-            paceSource={deviceSource}
+            paceSource={readOnly ? undefined : deviceSource}
             v3={v3}
             live={live}
             strategy={strategy}
@@ -196,30 +207,33 @@ export function PitwallPremiumView({
           "tyres",
           <VehicleTelemetryPanel v3={v3} live={live} tyreEstimate={tyreEstimate} tyreModel={tyre.estimate} />,
         )}
-        {panel("pitstop", <PitStopAnchor source={deviceSource} enabled showExample />)}
+        {!readOnly &&
+          panel("pitstop", <PitStopAnchor source={deviceSource} enabled showExample />)}
       </div>
 
-      <details className="ptp-more" data-pitwall-more="true">
-        <summary>
-          <span>
-            <FlaskConical aria-hidden size={14} /> Meer analyse
-          </span>
-          <ChevronDown aria-hidden size={15} />
-        </summary>
-        <div className="ptp-more-body">
-          <TyreModelPanel
-            estimate={tyre.estimate}
-            bron={tyre.bron}
-            coverage={tyre.coverage}
-            coverageLoading={tyre.coverageLoading}
-            coverageError={tyre.coverageError}
-            modelLoading={tyre.modelLoading}
-            v2Error={tyre.v2Error}
-          />
-          <RawTelemetryDetails value={v3} />
-          <p className="ptp-footnote">Live telemetrie verfrist automatisch.</p>
-        </div>
-      </details>
+      {!readOnly && (
+        <details className="ptp-more" data-pitwall-more="true">
+          <summary>
+            <span>
+              <FlaskConical aria-hidden size={14} /> Meer analyse
+            </span>
+            <ChevronDown aria-hidden size={15} />
+          </summary>
+          <div className="ptp-more-body">
+            <TyreModelPanel
+              estimate={tyre.estimate}
+              bron={tyre.bron}
+              coverage={tyre.coverage}
+              coverageLoading={tyre.coverageLoading}
+              coverageError={tyre.coverageError}
+              modelLoading={tyre.modelLoading}
+              v2Error={tyre.v2Error}
+            />
+            <RawTelemetryDetails value={v3} />
+            <p className="ptp-footnote">Live telemetrie verfrist automatisch.</p>
+          </div>
+        </details>
+      )}
     </div>
   );
 }

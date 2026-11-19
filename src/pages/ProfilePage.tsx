@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { User, Save, Gamepad2, TrendingUp, Shield, Info, Trophy, Flag, Car, UserPlus, X, Clock, ImagePlus, Plus, Camera, Loader2, MessageSquare, Link, CheckCircle2, RefreshCw, Lock } from "lucide-react";
+import { User, Save, Gamepad2, TrendingUp, Shield, Info, Trophy, Flag, Car, UserPlus, X, Clock, ImagePlus, Plus, Camera, Loader2, MessageSquare, Link, CheckCircle2, RefreshCw, Lock, Gauge } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
@@ -324,7 +324,14 @@ const ProfilePage = () => {
               <User className="w-5 h-5 text-primary" />
               <span className="text-sm font-medium text-primary uppercase tracking-[0.15em]">Account</span>
             </div>
-            <h1 className="font-heading text-4xl font-black mb-8">MIJN PROFIEL</h1>
+            <h1 className="font-heading text-4xl font-black mb-4">MIJN PROFIEL</h1>
+            <RouterLink
+              to="/pitwall/"
+              className="mb-8 inline-flex items-center gap-2 rounded-lg border border-orange-500/40 bg-orange-500/10 px-4 py-2.5 text-sm font-black text-orange-200 transition hover:border-orange-400 hover:bg-orange-500/20 hover:text-white"
+            >
+              <Gauge className="h-4 w-4" aria-hidden />
+              Mijn Pitwall
+            </RouterLink>
 
             {/* Stats overview */}
             {myResults && myResults.length > 0 && (

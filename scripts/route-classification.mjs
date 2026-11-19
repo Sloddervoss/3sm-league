@@ -13,9 +13,12 @@ const alwaysPrivateSeoRoutes = [
   '/stewards',
   '/koppel',
   '/simhub-koppelen',
+  // Persoonlijke Pitwall en de opt-in deelview zijn account-/bearer-only.
+  '/pitwall',
+  '/pitwall/shared',
 ];
 
-const privateRoutePrefixes = ['/admin'];
+const privateRoutePrefixes = ['/admin', '/pitwall'];
 
 export const createPrivateSeoRoutes = (communitySupportPublic = false) => [
   ...alwaysPrivateSeoRoutes,

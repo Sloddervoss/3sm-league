@@ -23,6 +23,7 @@ export function PremiumMasthead({
   state,
   sectorCount,
   refreshing,
+  tag = "PITWALL TEST",
 }: {
   deviceName: string;
   trackLabel: string;
@@ -36,6 +37,8 @@ export function PremiumMasthead({
   state: PitwallConnectionState;
   sectorCount: number;
   refreshing: boolean;
+  /** Productietag; de testroute houdt de bestaande aanduiding. */
+  tag?: string;
 }) {
   const copy = statusCopy[state];
   const telemetryDetail = state === "live"
@@ -49,7 +52,7 @@ export function PremiumMasthead({
         <span className="ptp-brand">3SM</span>
         <span className="ptp-brand-sub">RACE OPERATIONS</span>
         <span className="ptp-brand-rule" aria-hidden />
-        <span className="ptp-brand-tag">PITWALL TEST</span>
+        <span className="ptp-brand-tag">{tag}</span>
       </div>
 
       <div className="ptp-mast-main">

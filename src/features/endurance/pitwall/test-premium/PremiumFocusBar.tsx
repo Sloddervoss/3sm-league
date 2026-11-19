@@ -21,6 +21,8 @@ export function PremiumFocusBar({
   onShowArchive,
   onToggleFullscreen,
   onExit,
+  showProfiles = true,
+  showArchive = true,
 }: {
   active: boolean;
   fullscreen: boolean;
@@ -32,6 +34,9 @@ export function PremiumFocusBar({
   onShowArchive: () => void;
   onToggleFullscreen: () => void;
   onExit: () => void;
+  /** De publieke meekijker heeft geen profiel- of archiefbeheer. */
+  showProfiles?: boolean;
+  showArchive?: boolean;
 }) {
   return (
     <div
@@ -55,21 +60,25 @@ export function PremiumFocusBar({
       </span>
 
       <div className="ptp-focus-actions">
-        <button
-          type="button"
-          className="ptp-focus-btn"
-          onClick={onToggleProfiles}
-          aria-expanded={profilesOpen}
-          aria-controls="ptp-focus-profiles"
-        >
-          <PanelTop aria-hidden size={13} />
-          Profielen
-          <span className="ptp-focus-count">{deviceCount}</span>
-        </button>
-        <button type="button" className="ptp-focus-btn" onClick={onShowArchive}>
-          <Archive aria-hidden size={13} />
-          Archief
-        </button>
+        {showProfiles && (
+          <button
+            type="button"
+            className="ptp-focus-btn"
+            onClick={onToggleProfiles}
+            aria-expanded={profilesOpen}
+            aria-controls="ptp-focus-profiles"
+          >
+            <PanelTop aria-hidden size={13} />
+            Profielen
+            <span className="ptp-focus-count">{deviceCount}</span>
+          </button>
+        )}
+        {showArchive && (
+          <button type="button" className="ptp-focus-btn" onClick={onShowArchive}>
+            <Archive aria-hidden size={13} />
+            Archief
+          </button>
+        )}
         <button
           type="button"
           className="ptp-focus-btn"
