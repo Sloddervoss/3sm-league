@@ -258,7 +258,13 @@ npx eslint <gewijzigde bestanden>       # geen fouten
 npx tsc -p tsconfig.app.json --noEmit   # bestaande fouten in
                                         # supabase/functions/_shared/observationV1.ts;
                                         # geen fouten in de gewijzigde bestanden
+VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_ANON_KEY=build-placeholder \
+  npx vite build                        # geslaagd (6,44 s)
 ```
+
+De volledige Vitest-run geeft 2458 geslaagde tests en 3 bestaande
+falingen (`simHubConnectorContract` 2×, `tyreTelemetryContract` 1×). Dezelfde
+drie falen op de ongewijzigde basis `b0e92979`; ze raken deze wijziging niet.
 
 ## 7. Risico's en grenzen
 
