@@ -391,9 +391,11 @@ Open/onverificable gates:
 
 - Geen productieapply: de migratie is lokaal toegepast en teruggedraaid, maar
   niet op productie uitgevoerd. Dat wacht op expliciete goedkeuring.
-- De connector is niet gebouwd/uitgebracht/geïnstalleerd en de pluginversie is
+- De connector is in deze ronde niet gebouwd/uitgebracht/geïnstalleerd en de pluginversie is
   in deze ronde niet gewijzigd. De draaiende connector 0.7.6.4 stuurt nog geen
   `pit_in`/`pit_out`; tot een nieuwe build blijft de persoonlijke pitduur leeg.
+  Inmiddels is wel een compile-only 0.7.6.5-artefact gebouwd; zie §9. Dat is niet
+  gepubliceerd, niet ondertekend en niet geïnstalleerd.
 - De productie-Edge is niet met de nieuwe events getest; alleen de echte
   Edge-normalisatiefunctie lokaal.
 - De volledige typecheck heeft bestaande fouten buiten de gewijzigde
@@ -414,3 +416,35 @@ Open/onverificable gates:
   afgekeurde flank blijft zichtbaar in de diagnostiek.
 - Geen productie-DB, geen migratie uitgevoerd, geen share-link aangemaakt,
   geen connector geïnstalleerd of herstart, geen push/release.
+
+## 9. Compile-only artefact 0.7.6.5
+
+Laatste buildstap vóór een publicatiebeslissing. Alleen lokaal; geen release,
+ondertekening, upload, site-deploy, installatie of herstart.
+
+| Feit | Uitkomst |
+|---|---|
+| Live manifest vóór de build | stable `0.7.6.4` (889344 bytes, `76505822…`), canary `0.7.6.2` (`646182…`) |
+| Volgend patch | `0.7.6.5`, strikt hoger dan beide en op geen enkele branch al gezet |
+| Bron | `git archive` van commit `ca6fdd4a` (alleen de versiebump bovenop `20a251ed`); 125 bestanden, 0 inputafwijkingen op Beest |
+| Build | Beest, isolated scratch, MSBuild BuildTools, net48 Release AnyCPU, 0 errors, 1 bestaande `CS0169`-waarschuwing, `/define:TRACE`, 49/49 Compile-items |
+| DLL | 894976 bytes, `811184b5d81b261b00b1dc29b5fe7c13f13b859813c2437731cd8d5240170fb9`, assembly- en fileversie `0.7.6.5` |
+| Updater | embedded 29696 bytes `8735cdf3…`, identiek aan de updater uit dezelfde build |
+| Sleutel | productiemodulus byte-exact aanwezig (prefix `623ziGD…`), geen testsleutel |
+| Pitflanken | `pit_in`/`pit_out`-literals en `PitVisitId`-metadata in de DLL |
+| ZIP | 461129 bytes `ccf145db…`; binnen-DLL gelijk aan het machine-artefact |
+| Oude connector | live 0.7.6.4-DLL keurt het live manifest goed, vier tegenproeven False; de nieuwe DLL doet hetzelfde |
+| Gates | kloon/rollback 62/62, pitvisits 25/25, pace-history 9/9, C# 901/0 (PE01–PE12), pitwall 46 files/998 tests, sectorreplay 11 polls, pitduur 38.125 s |
+
+Lokaal gestaged, niet publiek: `public/downloads/3SM.EnduranceConnector-0.7.6.5.zip`
+(plus de lokale alias), de downloadkaart op `SimHubPairingPage.tsx`, de i18n-sleutel,
+`docs/simhub-update-gids.md` en de vastgepinde test. Er is **geen** manifest geschreven
+en **niet** ondertekend; `download-metadata-unsigned.json` is expliciet niet-publiceerbaar.
+
+Bewijs: `/home/hermes/artifacts/3sm/sector-continuity-pit-0.7.6.5/`
+(`FROZEN.json`, `VERIFICATIE.txt`, `PREVIEW-hmi.txt`, `build.log`,
+`source-manifest.json`, `sector-replay/`, `pit-duration-replay/`).
+
+Open: publicatie-GO, ondertekening met de release-key, upload/manifest/site in één
+venster, en de echte toestelupgrade plus een meetrit waarin `pit_in`/`pit_out` en de
+zichtbare pitduur op de gewone pitwall verschijnen.
