@@ -184,9 +184,10 @@ pit-in/pit-uit en dus geen bruikbare tijd. Deze tabel is **niet** gebruikt.
 De bewezen bron is `simhub_tyre_observations`: elk frame bewaart
 `device_id`, `session_key`, `frame_sequence`, `session_time_seconds`,
 `on_pit_road` en `driver_name`. Dat is dezelfde ruwe `OnPitRoad`-flank als de
-bestaande pitdetectie, maar met een bron-tijdstempel per frame. De connector
-0.7.6.4 levert deze velden al; **een connectorpatch is niet nodig** en is niet
-gemaakt.
+bestaande pitdetectie, maar met een bron-tijdstempel per frame. De repo staat op
+connector `0.7.6.4` (zie `docs/operations/2026-11-17-live-sector-updates-go.md`);
+die versie levert deze velden al. **Een connectorpatch is niet nodig** en is
+niet gemaakt; er is geen live versiecheck of installatie uitgevoerd.
 
 ### 5.2 Vastlegging
 
