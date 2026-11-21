@@ -1,0 +1,50 @@
+[
+  {
+    "eventUid": "d5152801-eed8-4e47-91e8-6f5ddc852099",
+    "eventId": "evt-1",
+    "kind": "pit_in",
+    "segmentId": "seg-107d2d221eda",
+    "pitVisitId": "pit-seg-107d2d221eda-1",
+    "observedSessionId": "sim-fixture-1",
+    "observedAt": "2026-11-21T12:00:01.000Z",
+    "sessionTimeSeconds": 1001,
+    "sdkTick": 200060,
+    "wearBefore": null,
+    "wearAfter": null,
+    "setGeneration": null,
+    "evidence": {
+      "version": 1,
+      "source": "ir_sdk_onpitroad",
+      "channels": [
+        "OnPitRoad"
+      ]
+    },
+    "confidence": 1,
+    "recordRevision": 1,
+    "supersedesEventUid": null
+  },
+  {
+    "eventUid": "2ba2e0a7-93fb-4da4-a64d-d5b301e537af",
+    "eventId": "evt-2",
+    "kind": "pit_out",
+    "segmentId": "seg-107d2d221eda",
+    "pitVisitId": "pit-seg-107d2d221eda-1",
+    "observedSessionId": "sim-fixture-1",
+    "observedAt": "2026-11-21T12:00:41.000Z",
+    "sessionTimeSeconds": 1041,
+    "sdkTick": 202460,
+    "wearBefore": null,
+    "wearAfter": null,
+    "setGeneration": null,
+    "evidence": {
+      "version": 1,
+      "source": "ir_sdk_onpitroad",
+      "channels": [
+        "OnPitRoad"
+      ]
+    },
+    "confidence": 1,
+    "recordRevision": 1,
+    "supersedesEventUid": null
+  }
+]

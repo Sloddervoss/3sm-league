@@ -4,8 +4,10 @@ Datum: 2026-11-21
 Branch: `fix/sector-continuity-pit-visits`
 Basis: `b0e92979` (origin/main)
 Status: lokaal geïmplementeerd en getest; **geen push, deploy, migratie, installatie of productieactie**.
-De productiebase is alleen-lezen gecontroleerd; de gevonden drift maakt de
-volledige `simhub_persist_v3`-vervanging nog niet toepasbaar. Zie §8.
+De productiebase is alleen-lezen gecontroleerd. De eerdere veronderstelde
+drift bleek een foutieve hash in de migratie, geen andere productiebody; de
+openstaande persistentie-gate is lokaal gesloten met een gecontroleerde
+splice op de echte productiedefinitie. Zie §7.
 
 Dit document hoort bij de eerdere presentatiefix in
 `docs/operations/2026-11-19-opponent-sector-retention.md`. Die fix verklaarde
@@ -254,8 +256,10 @@ node supabase/tests/personal-pit-visits.test.mjs
 #        entry/exit, cross-device/cross-session, tick/klok/gat, confidence,
 #        5–900, current-observed-session, diagnostics, grants, rollback
 node supabase/tests/persist-pace-identity-guard.test.mjs
-# 14/14: echte helper-body met sparse/identity/gap-payloads, reset vs carry,
-#        drift/vorige preimage-string, 24h-cleanup
+# 62/62: volledige gedeployde persist-body op een schema-only productieklonen;
+#        legacy no-op, sparse identity, track/car/segment/klok-reset, 24h-cleanup,
+#        echte connector-pitflanken via Edge-normalisatie + meetbatch + trigger,
+#        rollback van bodies én effectieve ACL in één transactie
 node supabase/tests/pace-history-identity-guard.test.mjs
 # 9/9: echte trigger-body, transient identity, echte resets, stale frame,
 #      cleanup, rollback
@@ -341,34 +345,57 @@ premiumtabel.
 ## 7. Productie-read-only controle en open gates
 
 Uitgevoerd via de bestaande SSH/runbookroute op `3sm-docker`, uitsluitend
-`SELECT`/catalogusmetadata. Geen productie-DDL/DML, geen write, geen deploy.
+`SELECT`/catalogusmetadata in een read-only transactie en één
+`pg_dump --schema-only`. Geen productie-DDL/DML, geen write, geen deploy.
 
 | Feit | Uitkomst |
 |---|---|
-| `simhub_persist_v3` op productie | md5 `e15ef4a7bde6e876e835c406696283c6`; repo-preimage `4e53b4305bb36cb8ad6bad4ecd804eff` → **drift** |
-| `simhub_pace_merge_v1` op productie | md5 `0f984dd59a233a499caa35e16a68515c`; repo-preimage `5a8ead0f2c8e29633b7f647697c86e2a` → **drift** |
-| `pitwall_personal_pit_visits` | bestaat niet |
-| `simhub_pace_history_guard_v1` | bestaat niet |
+| `simhub_persist_v3(text,text,bigint,timestamptz,jsonb,text,jsonb,jsonb)` | md5 `e15ef4a7bde6e876e835c406696283c6`; gelijk aan de repo-preimage uit `20261115201044` (byte-voor-byte vergeleken) → **geen drift** |
+| `simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz)` | md5 `0f984dd59a233a499caa35e16a68515c`; gelijk aan `20261117201558` → **geen drift** |
+| `simhub_evidence_v1_valid(jsonb)` | md5 `1fdab6c7c46ea98dc70e5f1386284ccd`; body gelijk aan `20261031190300` (alleen hoofdlettergebruik van het `CREATE`-header verschilt) |
+| `pitwall_personal_pit_visits` / trigger | bestaan nog niet op productie |
 | `simhub_measurement_events.device_id` | `text` (geen uuid/FK), zoals de repo-baseline |
 | `simhub_measurement_events` rechten | alleen `postgres`/`service_role`; `authenticated`/`anon` geen SELECT |
 | `pit_in`/`pit_out`-events op productie | 0 |
 
-Gevolg: de nieuwe `20261121122000_persist_pace_identity_guard.sql` bevat een
-harde `DO $drift$`-guard en **weigert** te draaien als de productiefunctie niet
-gelijk is aan de repo-preimage. Dat is bewust fail-closed: de productieversie
-bevat extra wijzigingen (o.a. `record_revision`/`content_hash`) die niet stil
-verloren mogen gaan. De trigger-guard uit `20261121120000` is zelfstandig
-toepasbaar, maar is in deze ronde **niet** op productie toegepast.
+De eerdere hash `4e53b4305bb36cb8ad6bad4ecd804eff` is de preimage van
+`20261115201044` (de body vóór die vervanging), niet de postimage die deze
+migratie aantreft; `5a8ead0f2c8e29633b7f647697c86e2a` is de `prosrc`-hash van
+de merge vóór `20261117201558`, geen andere definitie. De productiebody bevat
+**geen** extra `record_revision`/`content_hash`-wijziging. De forward-migratie
+is daarom herschreven van een volledige body-kopie naar een kleine,
+gecontroleerde splice op de definitie die `pg_get_functiondef` werkelijk
+teruggeeft:
+
+- De guard eist exact de drie preimage-hashes hierboven en weigert elke andere
+  body, een dubbele treffer of een niet-omkeerbare vervanging.
+- Alleen het PACE-`SELECT CASE`-blok en de bijbehorende declaratie worden
+  vervangen. De postimage is exact `f6117484afcc3107c772c8c314e1e853`;
+  `simhub_pace_merge_v1` blijft byte-identiek.
+- De rollback doet de omgekeerde splice en moet exact
+  `e15ef4a7bde6e876e835c406696283c6` teruggeven; de test vergelijkt beide
+  bodies én `proacl`/owner in één transactie.
+- Tijdens de test bleek de meetbatch elke echte pitflank af te keuren met
+  `evidence_contract`: de connector serialiseert `channels:["OnPitRoad"]`,
+  terwijl het evidence-contract alleen lowercase kanalen accepteerde. De
+  forward vervangt daarom ook één regex (alleen `channels`, niet `source`);
+  de postimage is `0305699f4456814f7d65bdccfd52d3f7`. Zonder die wijziging
+  bereikten `pit_in`/`pit_out` de pitvisit-trigger nooit.
+
+De schema-only kloon (`supabase/tests/fixtures/simhub-production-schema-20261121.sql.gz`,
+97 tabellen en 288 functies, nul rijen) en de volledige test staan in
+`supabase/tests/persist-pace-identity-guard.test.mjs`; de test voert de echte
+gedeployde `simhub_persist_v3`-body uit, niet alleen de helpers.
 
 Open/onverificable gates:
 
-- Geen productieapply, dus de echte productie-`simhub_persist_v3` is niet
-  vervangen en de productie-Edge is niet getest met de nieuwe events.
-- De connector is niet gebouwd/uitgebracht/geïnstalleerd. De draaiende
-  connector 0.7.6.4 stuurt nog geen `pit_in`/`pit_out`; tot een nieuwe build
-  blijft de persoonlijke pitduur leeg (geen tyre-fallback).
-- De productie-drift moet eerst met de beheerder worden verzoend; daarna kan
-  de persist-helper en de trigger in een aparte, gecontroleerde migratie.
+- Geen productieapply: de migratie is lokaal toegepast en teruggedraaid, maar
+  niet op productie uitgevoerd. Dat wacht op expliciete goedkeuring.
+- De connector is niet gebouwd/uitgebracht/geïnstalleerd en de pluginversie is
+  in deze ronde niet gewijzigd. De draaiende connector 0.7.6.4 stuurt nog geen
+  `pit_in`/`pit_out`; tot een nieuwe build blijft de persoonlijke pitduur leeg.
+- De productie-Edge is niet met de nieuwe events getest; alleen de echte
+  Edge-normalisatiefunctie lokaal.
 - De volledige typecheck heeft bestaande fouten buiten de gewijzigde
   bestanden (o.a. `src/main.tsx`, `pitWindow.ts`, community-support); die zijn
   niet door deze wijziging veroorzaakt en niet “opgelost” door ze te negeren.
