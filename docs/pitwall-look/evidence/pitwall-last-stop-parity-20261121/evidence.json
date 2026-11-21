@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "commit": "c96b0f180dc5f225e5f37a51afd4dd8b5ed1d492",
+  "run": "2026-11-21",
+  "personal": {
+    "seconds": "38.125",
+    "source": "measurement_event_pit_edges",
+    "benchmark": "gross",
+    "slot": "gross",
+    "text": "38.125 sLaatste gemeten stop · bruto benchmark · niet in het strategiemodel.Bruto pitstraattijd, service inbegrepen. Geen netto raceverlies."
+  },
+  "admin": {
+    "seconds": "38.125",
+    "source": "measurement_event_pit_edges",
+    "benchmark": "gross",
+    "slot": "gross",
+    "text": "38.125 sLaatste gemeten stop · bruto benchmark · niet in het strategiemodel.Bruto pitstraattijd, service inbegrepen. Geen netto raceverlies."
+  },
+  "errors": []
+}

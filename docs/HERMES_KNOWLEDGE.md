@@ -1,5 +1,22 @@
 # Hermes — repositorykennis
 
+## Actueel — Pitwall-test en Mijn Pitwall delen de laatste stop
+
+`/admin/pitwall-test` (premium) en Mijn Pitwall tonen de laatste gemeten stop
+met hetzelfde `PitDurationPanel`, dezelfde `.ptp-pit-benchmark`-slot direct
+onder `DecisionBand`, dezelfde copy/format en dezelfde lege/fouttoestand. Alleen
+de lezer verschilt: owner (`readPersonalPitVisits`) versus beheerder
+(`readAdminPitVisits`) op een niet-eigen device. De server-RPC
+`pitwall_personal_pit_visits_v1` blijft de grens (`owner OR can_manage_simhub()`);
+de testroute blijft super-admin. Geen nieuwe rol, grant, anonieme/share-route of
+tweede meetwaarheid. De kaart is live-gegate en wist bij device-/sessiewissel
+direct de oude stop; late query-antwoorden worden genegeerd via `contextKey` +
+generatieteller. Blijvende regressie: `npm run test:pitwall-parity`,
+`npx vitest run src/features/personal-pitwall/PitDurationPanel.test.tsx` en
+`npm run test:db:pitwall-pit-visits` (owner/admin/outsider + rollback).
+Browserbewijs: `docs/pitwall-look/evidence/pitwall-last-stop-parity-20261121/`.
+Details: `docs/operations/2026-11-21-pitwall-test-last-stop-parity.md`.
+
 ## Actueel — S2E5 zero-hop inname lokaal geaccepteerd
 
 Bron/gemeten SHA `a2ab46f584926162090cf0408e54573d6721b4d6` heeft onafhankelijke
