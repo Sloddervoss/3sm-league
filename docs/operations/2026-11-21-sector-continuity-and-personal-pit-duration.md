@@ -226,7 +226,7 @@ Unit/component (Vitest):
 
 ```bash
 npx vitest run src/features/endurance/pitwall src/features/personal-pitwall
-# 45 files, 991 tests passed
+# 45 files, 992 tests passed
 ```
 
 SQL (geïsoleerde PGlite, geen remote DB):
