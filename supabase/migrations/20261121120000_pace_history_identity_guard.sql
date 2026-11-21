@@ -84,7 +84,8 @@ BEGIN
     NEW.v3_normalized := jsonb_set(
       NEW.v3_normalized,
       '{identity}',
-      coalesce(NEW.v3_normalized -> 'identity', '{}'::jsonb) || jsonb_build_object('trackId', old_track),
+      coalesce(NEW.v3_normalized -> 'identity', '{}'::jsonb) || jsonb_build_object('trackId',
+        CASE WHEN old_track ~ '^[0-9]+$' THEN to_jsonb(old_track::bigint) ELSE to_jsonb(old_track) END),
       true
     );
     new_track := old_track;

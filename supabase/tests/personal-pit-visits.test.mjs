@@ -2,11 +2,13 @@
 /**
  * Isolated PGlite test for personal pit-in -> pit-out visits.
  *
- * The source is the raw tyre observation stream (explicit OnPitRoad flanks +
- * session time), never measurement_events, received_at or a whole pit lap.
- * Covers: a completed visit, idempotent trigger, initial-in-pit, missing exit,
- * session-time reset, 5–900 s bounds, null gaps, team switch, current-session
- * read scope, permission denial and rollback. No remote database is touched.
+ * The source is the pair of explicit connector measurement events `pit_in` and
+ * `pit_out`, each with its own observed_at, session time and SDK tick. Never
+ * the sampled tyre table, received_at or a whole pit lap. Covers: real pair,
+ * out-of-order delivery, retry idempotency, missing entry/exit, cross-session
+ * and cross-visit isolation, clock/tick discontinuities, confidence rejection,
+ * duration bounds, current-session read scope, permission denial, grants and
+ * rollback. No remote database is touched.
  *
  * Run: node supabase/tests/personal-pit-visits.test.mjs
  */
@@ -18,14 +20,13 @@ import { PGlite } from "@electric-sql/pglite";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = resolve(here, "../migrations/20261121121000_personal_pit_visits.sql");
+const connectorFixture = resolve(here, "./fixtures/pit-edges-connector.json");
 const rollback = resolve(here, "../rollbacks/20261121121000_personal_pit_visits.down.sql");
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
 const DEVICE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const EVENT = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-const TEAM = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
-const TEAM_2 = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+const DEVICE_2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 const db = await PGlite.create();
 const results = [];
@@ -45,112 +46,181 @@ await db.exec(`
     id uuid PRIMARY KEY,
     owner_user_id uuid NOT NULL
   );
-  CREATE TABLE public.simhub_telemetry_latest (
-    device_id uuid PRIMARY KEY REFERENCES public.simhub_devices(id) ON DELETE CASCADE,
-    session_id text NOT NULL,
-    received_at timestamptz NOT NULL DEFAULT now()
-  );
-  CREATE TABLE public.simhub_tyre_observations (
+  CREATE TABLE public.simhub_measurement_events (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    device_id uuid NOT NULL REFERENCES public.simhub_devices(id) ON DELETE CASCADE,
-    endurance_event_id uuid,
-    endurance_team_id uuid,
-    session_key text NOT NULL,
-    frame_sequence bigint NOT NULL,
+    device_id text NOT NULL,
+    event_uid uuid NOT NULL,
+    event_id text,
+    kind text NOT NULL,
+    segment_id text,
+    pit_visit_id text,
+    observed_session_id text,
+    delivered_session_id text,
+    transport_session_id text,
     observed_at timestamptz,
-    session_time_seconds numeric(12,3),
-    lap integer,
-    driver_name text,
-    on_pit_road boolean,
-    UNIQUE (device_id, session_key, frame_sequence)
+    received_at timestamptz NOT NULL DEFAULT now(),
+    session_time_seconds double precision,
+    sdk_tick bigint,
+    evidence jsonb,
+    confidence double precision,
+    UNIQUE (device_id, event_uid)
   );
   CREATE FUNCTION public.can_manage_simhub() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
   INSERT INTO public.simhub_devices VALUES ('${DEVICE}', '${OWNER}');
-  INSERT INTO public.simhub_telemetry_latest(device_id, session_id, received_at) VALUES ('${DEVICE}', 'session-a', now());
+  INSERT INTO public.simhub_devices VALUES ('${DEVICE_2}', '${OWNER}');
+`);
+
+// Historische rijen van vóór de trigger: de migratie mag ze niet backfillen.
+await db.exec(`
+  INSERT INTO public.simhub_measurement_events
+    (device_id,event_uid,kind,pit_visit_id,observed_session_id,observed_at,session_time_seconds,sdk_tick,confidence)
+  VALUES
+    ('${DEVICE}','00000000-0000-4000-8000-0000000000aa','pit_in','pit-historic-1','sim-historic','2026-11-20T10:00:00Z',10,1000,1),
+    ('${DEVICE}','00000000-0000-4000-8000-0000000000ab','pit_out','pit-historic-1','sim-historic','2026-11-20T10:00:40Z',50,3400,1);
 `);
 
 await db.exec(await readFile(migration, "utf8"));
 
-let seq = 0;
-const obs = async ({ session = "session-a", onPit, time, lap = 10, team = TEAM, event = EVENT, driver = "Driver A" }) => {
-  seq += 1;
+const noBackfill = await db.query("SELECT count(*)::int AS n FROM public.pitwall_personal_pit_visits");
+check(noBackfill.rows[0].n === 0, "the migration does not backfill historical measurement events");
+const noBackfillEdges = await db.query("SELECT count(*)::int AS n FROM public.pitwall_personal_pit_visit_edges");
+check(noBackfillEdges.rows[0].n === 0, "historical events do not create diagnostic edge rows either");
+
+let uid = 0;
+const newUid = () => {
+  uid += 1;
+  return `00000000-0000-4000-8000-${String(uid).padStart(12, "0")}`;
+};
+const edge = async ({
+  kind,
+  visit = "pit-seg-abc-1",
+  session = "sim-42-s1",
+  time,
+  wall = time,
+  tick = 100000 + time * 60,
+  confidence = 1,
+  note = null,
+  device = DEVICE,
+  eventUid = newUid(),
+}) => {
   await db.query(
-    `INSERT INTO public.simhub_tyre_observations
-       (device_id, endurance_event_id, endurance_team_id, session_key, frame_sequence, observed_at, session_time_seconds, lap, driver_name, on_pit_road)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [DEVICE, event, team, session, seq, new Date(Date.UTC(2026, 10, 21, 12, 0, 0) + time * 1000).toISOString(), time, lap, driver, onPit],
+    `INSERT INTO public.simhub_measurement_events
+       (device_id, event_uid, kind, segment_id, pit_visit_id, observed_session_id,
+        delivered_session_id, observed_at, session_time_seconds, sdk_tick, confidence, evidence)
+     VALUES ($1,$2,$3,'seg-abc',$4,$5,'transport-reused',$6,$7,$8,$9,$10)
+     ON CONFLICT (device_id, event_uid) DO NOTHING`,
+    [device, eventUid, kind, visit, session, new Date(Date.UTC(2026, 10, 21, 12, 0, 0) + wall * 1000).toISOString(),
+      time, tick, confidence, note == null ? null : JSON.stringify({ version: 1, source: "ir_sdk_onpitroad", channels: ["OnPitRoad"], note })],
   );
+  return eventUid;
 };
 
-const visitCount = async () => (await db.query("SELECT count(*)::int AS n FROM public.pitwall_personal_pit_visits")).rows[0].n;
-const visits = async () => (await db.query("SELECT * FROM public.pitwall_personal_pit_visits ORDER BY entry_frame_sequence")).rows;
+const visitCount = async () => (await db.query("SELECT count(*)::int AS n FROM public.pitwall_personal_pit_visits WHERE device_id=$1", [DEVICE])).rows[0].n;
+const visits = async () => (await db.query("SELECT * FROM public.pitwall_personal_pit_visits WHERE device_id=$1 ORDER BY entry_observed_at", [DEVICE])).rows;
 const read = async (uid = OWNER, device = DEVICE, limit = 5) => {
   await db.query("SELECT set_config('test.uid', $1, false)", [uid]);
   return (await db.query("SELECT public.pitwall_personal_pit_visits_v1($1,$2) AS out", [device, limit])).rows[0].out;
 };
 
+let current;
 try {
-  await obs({ onPit: false, time: 100 });
-  await obs({ onPit: true, time: 110 });
-  await obs({ onPit: true, time: 130 });
-  await obs({ onPit: false, time: 148 });
-  let current = await visits();
-  check(current.length === 1, "one explicit true -> false transition creates one visit");
+  // Echte C#-serializeroutput: dezelfde wire-DTO als de connector-outbox.
+  const serialized = JSON.parse(await readFile(connectorFixture, "utf8"));
+  for (const row of serialized) {
+    await db.query(
+      `INSERT INTO public.simhub_measurement_events
+         (device_id, event_uid, event_id, kind, segment_id, pit_visit_id, observed_session_id,
+          delivered_session_id, observed_at, session_time_seconds, sdk_tick, confidence, evidence)
+       VALUES ('${DEVICE_2}',$1,$2,$3,$4,$5,$6,'transport-reused',$7,$8,$9,$10,$11)`,
+      [row.eventUid, row.eventId, row.kind, row.segmentId, row.pitVisitId, row.observedSessionId,
+        row.observedAt, row.sessionTimeSeconds, row.sdkTick, row.confidence, JSON.stringify(row.evidence)],
+    );
+  }
+  const fixtureVisit = (await db.query(
+    "SELECT pit_lane_seconds FROM public.pitwall_personal_pit_visits WHERE device_id=$1",
+    [DEVICE_2],
+  )).rows;
+  check(fixtureVisit.length === 1 && Number(fixtureVisit[0].pit_lane_seconds) === 40,
+    "the real connector serializer output parses and pairs into one 40 s visit");
+
+  await edge({ kind: "pit_in", time: 100, wall: 100 });
+  await edge({ kind: "pit_out", time: 138, wall: 138 });
+  current = await visits();
+  check(current.length === 1, "one explicit pit_in/pit_out pair creates one visit");
   check(Number(current[0].pit_lane_seconds) === 38, "duration is exit session time minus entry session time (38 s)");
-  check(current[0].entry_lap === 10 && current[0].entry_driver_name === "Driver A", "lap and entry driver are stored from the entry frame");
+  check(current[0].entry_sdk_tick === 106000 && current[0].exit_sdk_tick === 108280, "both source SDK ticks are stored");
+  check((await db.query("SELECT pair_status FROM public.pitwall_personal_pit_visit_edges")).rows.every((row) => row.pair_status === "paired"),
+    "both edges are marked paired");
 
-  await db.query("INSERT INTO public.simhub_tyre_observations (device_id, session_key, frame_sequence, session_time_seconds, on_pit_road) VALUES ($1,'session-a',1,100,false) ON CONFLICT DO NOTHING", [DEVICE]);
-  check(await visitCount() === 1, "replaying the same frames is idempotent (unique visit key)");
+  await edge({ kind: "pit_in", time: 100, wall: 100, eventUid: current[0].entry_event_uid });
+  check(await visitCount() === 1, "retrying the same entry event is idempotent");
 
-  await obs({ session: "session-init", onPit: true, time: 200, lap: 11 });
-  await obs({ session: "session-init", onPit: false, time: 248, lap: 11 });
-  check(await visitCount() === 1, "a visit that starts in the pit without a prior false is not recorded");
-
-  await obs({ session: "session-open", onPit: true, time: 300, lap: 12 });
-  check(await visitCount() === 1, "an open visit without exit is not recorded");
-
-  await obs({ session: "session-reset", onPit: false, time: 0, lap: 13 });
-  await obs({ session: "session-reset", onPit: true, time: 400, lap: 13 });
-  await obs({ session: "session-reset", onPit: false, time: 390, lap: 13 });
-  check(await visitCount() === 1, "a backward session clock is a reset and is not recorded");
-
-  await obs({ session: "session-short", onPit: false, time: 0, lap: 14 });
-  await obs({ session: "session-short", onPit: true, time: 500, lap: 14 });
-  await obs({ session: "session-short", onPit: false, time: 503, lap: 14 });
-  check(await visitCount() === 1, "a pit-lane time below 5 s is not recorded");
-
-  await obs({ session: "session-long", onPit: false, time: 0, lap: 15 });
-  await obs({ session: "session-long", onPit: true, time: 600, lap: 15 });
-  await obs({ session: "session-long", onPit: false, time: 1601, lap: 15 });
-  check(await visitCount() === 1, "a pit-lane time above 900 s is not recorded");
-
-  await obs({ session: "session-null", onPit: false, time: 0, lap: 16 });
-  await obs({ session: "session-null", onPit: true, time: 700, lap: 16 });
-  await obs({ session: "session-null", onPit: null, time: 720, lap: 16 });
-  await obs({ session: "session-null", onPit: false, time: 750, lap: 16 });
+  // Out-of-order delivery: the exit is stored before the entry, then pairs.
+  const lateVisit = "pit-seg-abc-2";
+  await edge({ kind: "pit_out", visit: lateVisit, time: 240, wall: 240, tick: 114400 });
+  check(await visitCount() === 1, "an exit without an entry stays pending and creates no duration");
+  await edge({ kind: "pit_in", visit: lateVisit, time: 200, wall: 200, tick: 112000 });
   current = await visits();
-  check(current.length === 2 && Number(current[1].pit_lane_seconds) === 50, "an unknown (NULL) pit flag does not split the visit");
+  check(current.length === 2 && Number(current[1].pit_lane_seconds) === 40,
+    "a later entry pairs with the earlier exit (out-of-order delivery)");
 
-  await obs({ session: "session-team", onPit: false, time: 0, lap: 17 });
-  await obs({ session: "session-team", onPit: true, time: 800, lap: 17, team: TEAM });
-  await obs({ session: "session-team", onPit: false, time: 840, lap: 17, team: TEAM_2 });
-  check(await visitCount() === 2, "a team switch mid-visit makes the duration unusable");
+  // The same pitVisitId in another observed session is a different visit.
+  await edge({ kind: "pit_in", visit: "pit-seg-abc-3", session: "sim-42-s2", time: 300, wall: 300 });
+  check(await visitCount() === 2, "an entry from another observed session cannot pair with a different session's exit");
+  await edge({ kind: "pit_out", visit: "pit-seg-abc-3", session: "sim-42-s2", time: 340, wall: 340 });
+  check(await visitCount() === 3, "the same pitVisitId in a new observed session is its own visit");
 
-  await obs({ session: "session-b", onPit: false, time: 10 });
-  await obs({ session: "session-b", onPit: true, time: 20 });
-  await obs({ session: "session-b", onPit: false, time: 67 });
-  current = await visits();
-  check(current.length === 3, "a new session records its own visit");
-  check(current[2].session_key === "session-b" && Number(current[2].pit_lane_seconds) === 47, "session B keeps its own duration");
+  // Missing exit.
+  await edge({ kind: "pit_in", visit: "pit-open", time: 400, wall: 400 });
+  check(await visitCount() === 3, "an open visit without an exit is not recorded");
 
-  await db.query("UPDATE public.simhub_telemetry_latest SET session_id='session-b', received_at=now() WHERE device_id=$1", [DEVICE]);
+  // Same pitVisitId but different device never pairs.
+  await edge({ kind: "pit_in", visit: "pit-cross-device", time: 500, wall: 500, device: DEVICE_2 });
+  await edge({ kind: "pit_out", visit: "pit-cross-device", time: 540, wall: 540, device: DEVICE });
+  check(await visitCount() === 3, "two devices cannot share one pit visit");
+
+  // Non-monotone SDK tick.
+  await edge({ kind: "pit_in", visit: "pit-tick", session: "sim-42-s2", time: 600, wall: 600, tick: 140000 });
+  await edge({ kind: "pit_out", visit: "pit-tick", session: "sim-42-s2", time: 640, wall: 640, tick: 140000 });
+  const tickEdges = (await db.query("SELECT pair_status,reject_reason FROM public.pitwall_personal_pit_visit_edges WHERE pit_visit_id='pit-tick'")).rows;
+  check(await visitCount() === 3 && tickEdges.every((row) => row.pair_status === "rejected" && row.reject_reason === "sdk_tick_not_monotone"),
+    "a non-monotone source tick is rejected with its reason");
+
+  // Clock and telemetry gap: session time and wall clock disagree by > 30 s.
+  await edge({ kind: "pit_in", visit: "pit-gap", session: "sim-42-s2", time: 700, wall: 700 });
+  await edge({ kind: "pit_out", visit: "pit-gap", session: "sim-42-s2", time: 760, wall: 900 });
+  const gapEdges = (await db.query("SELECT pair_status,reject_reason FROM public.pitwall_personal_pit_visit_edges WHERE pit_visit_id='pit-gap'")).rows;
+  check(await visitCount() === 3 && gapEdges.every((row) => row.pair_status === "rejected" && row.reject_reason === "clock_telemetry_gap"),
+    "a clock/telemetry gap is rejected, never turned into a longer pit time");
+
+  // Duration bounds.
+  await edge({ kind: "pit_in", visit: "pit-short", session: "sim-42-s2", time: 800, wall: 800 });
+  await edge({ kind: "pit_out", visit: "pit-short", session: "sim-42-s2", time: 803, wall: 803 });
+  await edge({ kind: "pit_in", visit: "pit-long", session: "sim-42-s2", time: 900, wall: 900 });
+  await edge({ kind: "pit_out", visit: "pit-long", session: "sim-42-s2", time: 1901, wall: 1901 });
+  check(await visitCount() === 3, "durations below 5 s and above 900 s are not visits");
+
+  // A connector-rejected flank (unknown pit flag, tow/reset, gap) carries
+  // confidence 0 and must never pair just because both edges exist.
+  await edge({ kind: "pit_in", visit: "pit-unknown", session: "sim-42-s2", time: 2000, wall: 2000 });
+  await edge({ kind: "pit_out", visit: "pit-unknown", session: "sim-42-s2", time: 2040, wall: 2040, confidence: 0, note: "pit_flag_unknown" });
+  const unknownEdges = (await db.query("SELECT pair_status,reject_reason FROM public.pitwall_personal_pit_visit_edges WHERE pit_visit_id='pit-unknown'")).rows;
+  check(await visitCount() === 3 && unknownEdges.some((row) => row.pair_status === "rejected" && row.reject_reason === "pit_flag_unknown"),
+    "an unknown/tow/gap flank is rejected with the connector's explicit reason");
+
+  // The reader follows the newest observed session, not the reused transport.
   let feed = await read();
-  check(feed.available === true && feed.sessionKey === "session-b" && feed.visits.length === 1, "the personal reader returns only the current session");
-  check(Number(feed.visits[0].pitLaneSeconds) === 47 && feed.visits[0].source === "tyre_observation_pit_edges", "the reader exposes the measured gross duration and its source");
+  check(feed.available === true && feed.sessionKey === "sim-42-s2" && feed.visits.length === 1,
+    "the personal reader returns only the newest observed session");
+  check(Number(feed.visits[0].pitLaneSeconds) === 40 && feed.visits[0].source === "measurement_event_pit_edges",
+    "the reader exposes the measured gross duration and its source");
+  check(feed.diagnostics.rejectedEdges >= 3 && typeof feed.diagnostics.lastRejectReason === "string",
+    "rejected edges stay visible as an explicit diagnostic, not as a silent gap");
 
-  await db.query("UPDATE public.simhub_telemetry_latest SET session_id='session-c', received_at=now() WHERE device_id=$1", [DEVICE]);
+  await edge({ kind: "pit_in", visit: "pit-new-session", session: "sim-42-s3", time: 3000, wall: 3000 });
   feed = await read();
-  check(feed.available === false && feed.reason === "no_completed_visit", "a new session without a completed visit returns an explicit empty state");
+  check(feed.available === false && feed.reason === "no_completed_visit" && feed.sessionKey === "sim-42-s3",
+    "a new session without a completed visit returns an explicit empty state");
 
   await db.query("SELECT set_config('test.uid', $1, false)", [OTHER]);
   let denied = false;
@@ -163,16 +233,24 @@ try {
 
   const grants = await db.query(`
     SELECT
-      has_table_privilege('authenticated','public.pitwall_personal_pit_visits','SELECT') AS table_read,
+      has_table_privilege('authenticated','public.pitwall_personal_pit_visits','SELECT') AS visits_read,
+      has_table_privilege('authenticated','public.pitwall_personal_pit_visit_edges','SELECT') AS edges_read,
       has_table_privilege('anon','public.pitwall_personal_pit_visits','SELECT') AS anon_read,
-      has_function_privilege('authenticated','public.pitwall_personal_pit_visits_v1(uuid,integer)','EXECUTE') AS fn_exec
+      has_function_privilege('authenticated','public.pitwall_personal_pit_visits_v1(uuid,integer)','EXECUTE') AS fn_exec,
+      has_function_privilege('service_role','public.simhub_capture_personal_pit_visit_v2()','EXECUTE') AS trigger_fn
   `);
-  check(grants.rows[0].table_read === false && grants.rows[0].anon_read === false && grants.rows[0].fn_exec === true,
-    "the table is service-role only; the owner RPC is the authenticated gate");
+  check(grants.rows[0].visits_read === false && grants.rows[0].edges_read === false && grants.rows[0].anon_read === false
+    && grants.rows[0].fn_exec === true && grants.rows[0].trigger_fn === true,
+    "tables are service-role only; the owner RPC is the authenticated gate");
 
   await db.exec(await readFile(rollback, "utf8"));
-  const gone = await db.query("SELECT to_regclass('public.pitwall_personal_pit_visits') AS t, to_regprocedure('public.pitwall_personal_pit_visits_v1(uuid,integer)') AS f");
-  check(gone.rows[0].t === null && gone.rows[0].f === null, "rollback removes the table and reader");
+  const gone = await db.query(`
+    SELECT to_regclass('public.pitwall_personal_pit_visits') AS visits,
+           to_regclass('public.pitwall_personal_pit_visit_edges') AS edges,
+           to_regprocedure('public.pitwall_personal_pit_visits_v1(uuid,integer)') AS fn
+  `);
+  check(gone.rows[0].visits === null && gone.rows[0].edges === null && gone.rows[0].fn === null,
+    "rollback removes both tables and the reader");
 
   console.log(JSON.stringify({ isolatedPGlite: true, productionExecuted: false, backfill: false, passed: results.length, failed: 0, results }));
 } catch (error) {
