@@ -2,6 +2,7 @@ import { useState } from "react";
 import { completedLap, freshPaceHistory, persistedMetrics, rowSectors, trackSectorCount } from "./paceSeries";
 import type { V3Normalized } from "./pitwallHelpers";
 import { buildSectorTimingIndex, type CarSectorTiming } from "./sectorTiming";
+import { carRef, traceSector } from "./sectorTrace";
 import { geldigeLaatsteRonde } from "./standings";
 
 export type RetainedLapSectors = {
@@ -12,13 +13,25 @@ export type RetainedLapSectors = {
   observedAtMs: number;
 };
 
+/**
+ * Identiteit als losse, optionele delen. Een ontbrekend deel is "onbekend" en
+ * mag geen wissel bewijzen; alleen twee bekende, verschillende waarden doen dat.
+ * Zo kan een tussenframe zonder trackblok de bewezen sectoren niet wissen.
+ */
+type IdentityParts = {
+  transport: string | null;
+  trackId: number | null;
+  trackName: string | null;
+  config: string | null;
+};
+
 type State = {
   input: V3Normalized | null | undefined;
   /** Laatste niet-null frame; nodig om een bewaarde reeks nog aan een auto te koppelen. */
   lastInput: V3Normalized | null;
   context: string;
   /** Alleen transport/sessie/track-identiteit; nooit een meting. */
-  identity: string | null;
+  identity: IdentityParts | null;
   /** Laatste bekende PACE-segment; ontbrekende PACE mag dit niet wissen. */
   segment: string | null;
   clock: number | null;
@@ -40,12 +53,49 @@ const empty = (input: State["input"], context: string): State => ({
 });
 
 /** Sessie/track-identiteit. Ontbrekende metadata is "onbekend", geen wissel. */
-const identityOf = (input: V3Normalized | null | undefined): string | null => {
+const nonEmpty = (value: string | null | undefined): string | null => {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const identityOf = (input: V3Normalized | null | undefined): IdentityParts | null => {
   if (!input) return null;
-  const track = input.identity?.trackId ?? input.identity?.trackName ?? null;
-  const config = input.identity?.trackConfig ?? null;
-  if (track == null && config == null && !input.transportSessionId) return null;
-  return JSON.stringify([input.transportSessionId ?? "", track ?? "", config ?? ""]);
+  const parts: IdentityParts = {
+    transport: nonEmpty(input.transportSessionId),
+    trackId: typeof input.identity?.trackId === "number" && Number.isFinite(input.identity.trackId)
+      ? input.identity.trackId
+      : null,
+    trackName: nonEmpty(input.identity?.trackName),
+    config: nonEmpty(input.identity?.trackConfig),
+  };
+  if (parts.transport == null && parts.trackId == null && parts.trackName == null && parts.config == null) {
+    return null;
+  }
+  return parts;
+};
+
+/** Alleen een component die aan beide kanten bekend is, kan een wissel bewijzen. */
+const identityChangedFrom = (previous: IdentityParts | null, next: IdentityParts | null): boolean => {
+  if (!previous || !next) return false;
+  if (previous.transport != null && next.transport != null && previous.transport !== next.transport) return true;
+  if (previous.trackId != null && next.trackId != null && previous.trackId !== next.trackId) return true;
+  // trackName is alleen leidend als geen van beide kanten een numeriek trackId heeft.
+  if (previous.trackId == null && next.trackId == null
+    && previous.trackName != null && next.trackName != null && previous.trackName !== next.trackName) return true;
+  if (previous.config != null && next.config != null && previous.config !== next.config) return true;
+  return false;
+};
+
+/** Onbekende delen laten de laatst bekende waarde staan; bekende delen vullen aan. */
+const mergeIdentity = (previous: IdentityParts | null, next: IdentityParts | null): IdentityParts | null => {
+  if (!previous) return next;
+  if (!next) return previous;
+  return {
+    transport: next.transport ?? previous.transport,
+    trackId: next.trackId ?? previous.trackId,
+    trackName: next.trackName ?? previous.trackName,
+    config: next.config ?? previous.config,
+  };
 };
 
 const segmentOf = (input: V3Normalized | null | undefined): string | null => {
@@ -109,11 +159,29 @@ function update(previous: State | null, input: State["input"], context: string, 
 
   // Alleen een *bevestigde* wissel wist de reeks. Ontbrekende track- of
   // segmentmetadata in één frame is onbekend, geen nieuwe sessie.
-  const identityChanged = previous != null && previous.context === context && previous.identity != null && identity != null && identity !== previous.identity;
+  const identityChanged = previous != null && previous.context === context && identityChangedFrom(previous.identity, identity);
   const segmentChanged = previous != null && previous.context === context && previous.segment != null && segment != null && segment !== previous.segment;
   const clockRewound = previous != null && previous.clock != null && clock != null && clock < previous.clock - 0.001;
   const layoutChanged = observedCount > 0 && previous != null && previous.count > 0 && observedCount !== previous.count;
   const reset = !previous || previous.context !== context || identityChanged || segmentChanged || clockRewound || layoutChanged;
+  const resetReason = !previous ? "first_frame"
+    : previous.context !== context ? "context"
+      : identityChanged ? "identity"
+        : segmentChanged ? "segment"
+          : clockRewound ? "clock"
+            : layoutChanged ? "layout"
+              : null;
+  if (resetReason && previous) {
+    traceSector("retained_reset", {
+      scope: context,
+      detail: {
+        reason: resetReason,
+        cars_before: previous.laps.size,
+        had_track: identity != null && (identity.trackId != null || identity.trackName != null),
+        observed_count: observedCount,
+      },
+    });
+  }
 
   const laps = new Map<string, RetainedLapSectors>(reset ? undefined : [...(previous?.laps ?? [])]);
 
@@ -146,7 +214,21 @@ function update(previous: State | null, input: State["input"], context: string, 
 
     // De live sectorstand is per sector nieuwer; bewaar hem als volledige
     // ronde zodat een tijdelijke lege stand de rij niet leegmaakt.
-    const liveSectors = liveLap(live.get(o.id));
+    const timing = live.get(o.id);
+    const liveSectors = liveLap(timing);
+    if (timing && !liveSectors) {
+      traceSector("live_partial_ignored", {
+        scope: context,
+        car: carRef(o.id),
+        lap: timing.lap,
+        detail: {
+          slots: timing.slots.filter((slot) => slot?.seconds != null && slot.status !== "invalidated").length,
+          count: timing.sectorCount,
+          mixed_laps: timing.mixedLaps,
+          status: timing.status,
+        },
+      });
+    }
     if (liveSectors && newerThan({ lap: liveSectors.lap, observedSessionTime: clock }, cached)) {
       laps.set(o.id, { seconds: liveSectors.seconds, lap: liveSectors.lap, observedSessionTime: clock, observedAtMs: nowMs });
       continue;
@@ -182,7 +264,7 @@ function update(previous: State | null, input: State["input"], context: string, 
     input,
     lastInput: input,
     context,
-    identity: identity ?? (reset ? null : previous?.identity ?? null),
+    identity: reset ? identity : mergeIdentity(previous?.identity ?? null, identity),
     segment: segment ?? (reset ? null : previous?.segment ?? null),
     clock,
     count,

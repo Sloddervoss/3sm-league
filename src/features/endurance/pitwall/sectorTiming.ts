@@ -339,3 +339,28 @@ export function sectorCountFromHistory(history: PaceHistory | null | undefined):
   }
   return counts.size === 1 ? [...counts][0] : 0;
 }
+
+/**
+ * Mag deze live sectorstand een bewezen volledige ronde vervangen?
+ *
+ * Alleen wanneer alle kolommen van dezelfde layout én dezelfde ronde een
+ * geldige tijd hebben. Eén ontbrekende of ongeldige sector is een gedeeltelijke
+ * stand: die mag de vorige complete ronde niet per kolom overschrijven, want
+ * dan zouden oude en nieuwe rondes in één rij terechtkomen. Een mengeling van
+ * ronden is om dezelfde reden nooit een vervanger.
+ */
+export function isCompleteLiveTiming(
+  timing: CarSectorTiming | null | undefined,
+  sectorCount: number,
+): boolean {
+  if (!timing || timing.mixedLaps) return false;
+  if (!Number.isInteger(sectorCount) || sectorCount < 1 || sectorCount > SECTOR_MAX_COUNT) return false;
+  if (timing.sectorCount !== sectorCount || timing.slots.length !== sectorCount) return false;
+  return timing.slots.every((slot) =>
+    slot != null
+    && slot.status !== "invalidated"
+    && slot.seconds != null
+    && Number.isFinite(slot.seconds)
+    && slot.seconds > 0
+  );
+}

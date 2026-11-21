@@ -1,6 +1,6 @@
 import { freshMetrics, freshPaceHistory, persistedMetrics, rowSectors } from "./paceSeries";
 import { useRetainedLapSectors } from "./useRetainedLapSectors";
-import { buildSectorTimingIndex } from "./sectorTiming";
+import { buildSectorTimingIndex, isCompleteLiveTiming } from "./sectorTiming";
 import { SectorTimingCell } from "./SectorTimingCell";
 import type { V3Normalized } from "./pitwallHelpers";
 import { Fragment, useState } from "react";
@@ -177,10 +177,16 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
               {visibleRows.map((r, index) => {
                 const legacySectors = live ? rowSectors(v3,r.id,r.lastLapSeconds) : null;
                 const timing = sectorTimings?.get(r.id) ?? null;
-                const usingSectorUpdates = live && timing != null && timing.sectorCount === sectorCount;
+                // Een gedeeltelijke live stand mag een bewezen volledige ronde
+                // niet per kolom overschrijven. Zonder bewezen ronde blijft de
+                // gedeeltelijke stand zichtbaar met een eigen rondelabel.
+                const cachedBefore = retained.laps.get(r.id);
+                const hasCompleteCached = cachedBefore?.seconds.length === sectorCount;
+                const usingSectorUpdates = live && timing != null && timing.sectorCount === sectorCount
+                  && (isCompleteLiveTiming(timing, sectorCount) || !hasCompleteCached);
                 // Een live stand met een andere layout duwt een bewezen ronde
                 // niet weg; alleen de echte live weergave heeft voorrang.
-                const cached = !usingSectorUpdates ? retained.laps.get(r.id) : undefined;
+                const cached = !usingSectorUpdates ? cachedBefore : undefined;
                 const lastSectors = cached?.seconds.length === sectorCount ? cached : undefined;
                 const prior = lastSectors?.lap != null && r.lap != null && r.lap > lastSectors.lap + 1;
                 // Alleen een stilstaande feed of een oudere ronde dimt; het

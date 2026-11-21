@@ -3,7 +3,7 @@ import { ChevronRight, Flag, ListOrdered } from "lucide-react";
 import type { V3Normalized, V3Opponent } from "../pitwallHelpers";
 import { renderGap, renderPosition, type StandingsDerivation } from "../standings";
 import { freshMetrics, freshPaceHistory, rowSectors } from "../paceSeries";
-import { buildSectorTimingIndex } from "../sectorTiming";
+import { buildSectorTimingIndex, isCompleteLiveTiming } from "../sectorTiming";
 import { SectorTimingCell } from "../SectorTimingCell";
 import { useRetainedLapSectors } from "../useRetainedLapSectors";
 import { preciseLapTime } from "../telemetryFormat";
@@ -235,10 +235,16 @@ export function PremiumTimingPanel({
     const timing = live ? sectorTimings?.get(r.id) ?? null : null;
     const legacySectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
     const legacyComplete = legacySectors?.length === sectorCount;
-    const usingSectorUpdates = timing != null && timing.sectorCount === sectorCount;
+    // Een gedeeltelijke live stand mag een bewezen volledige ronde niet per
+    // kolom overschrijven. Zonder bewezen ronde is de gedeeltelijke stand het
+    // enige dat er is; die blijft zichtbaar met een eigen rondelabel per cel.
+    const cachedBefore = retained.laps.get(r.id);
+    const hasCompleteCached = cachedBefore?.seconds.length === sectorCount;
+    const usingSectorUpdates = live && timing != null && timing.sectorCount === sectorCount
+      && (isCompleteLiveTiming(timing, sectorCount) || !hasCompleteCached);
     // Een live stand met een afwijkende layout mag een bewezen volledige ronde
     // niet wegduwen: alleen de échte live weergave heeft voorrang.
-    const retainedLap = !usingSectorUpdates ? retained.laps.get(r.id) : undefined;
+    const retainedLap = !usingSectorUpdates ? cachedBefore : undefined;
     const sectors = !gap && retainedLap?.seconds.length === sectorCount ? retainedLap.seconds : null;
     const prior = retainedLap?.lap != null && r.lap != null && r.lap > retainedLap.lap + 1;
     // Dimen betekent "niet meer de laatste afgeronde ronde" of "feed ligt stil",
