@@ -461,6 +461,11 @@ internal static class FaseDTests
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
+            if (string.Equals(args[0], "--export-pit-edges", StringComparison.Ordinal))
+            {
+                Console.Write(MeasurementPitEdgeTests.ExportJson());
+                return 0;
+            }
             if (string.Equals(args[0], "--export-live-sectors", StringComparison.Ordinal))
             {
                 if (args.Length < 2) throw new ArgumentException("doelmap ontbreekt");
@@ -477,6 +482,7 @@ internal static class FaseDTests
                   Group("LapAttributionTests", () => LapAttributionTests.Run(Check));
                 Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
                 Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
+                Group("MeasurementPitEdgeTests", () => MeasurementPitEdgeTests.Run(Check));
                 Group("MeasurementAnchorTests", () => MeasurementAnchorTests.Run(Check));
                 Group("MeasurementOutboxTests", () => MeasurementOutboxTests.Run(Check));
                 Group("MeasurementTransportTests", () => MeasurementTransportTests.Run(Check));
@@ -515,6 +521,7 @@ internal static class FaseDTests
               baselineChecks += Group("LapAttributionTests", () => LapAttributionTests.Run(Check));
             baselineChecks += Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
             baselineChecks += Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
+            baselineChecks += Group("MeasurementPitEdgeTests", () => MeasurementPitEdgeTests.Run(Check));
             baselineChecks += Group("MeasurementAnchorTests", () => MeasurementAnchorTests.Run(Check));
             baselineChecks += Group("MeasurementOutboxTests", () => MeasurementOutboxTests.Run(Check));
             baselineChecks += Group("MeasurementTransportTests", () => MeasurementTransportTests.Run(Check));

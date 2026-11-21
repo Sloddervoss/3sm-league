@@ -10,6 +10,8 @@ import type {
 import { extractRaceClock } from "./pitwallHelpers";
 import type { PitwallContext } from "./pitwallHelpers";
 import { OpponentHistory } from "./opponentHistory";
+import { snapshotIsOlder, type SnapshotOrder } from "./snapshotOrder";
+import { traceSector } from "./sectorTrace";
 import { resolvePitStopMeasurement } from "./strategy/pitStops";
 import { parseTyreEstimate } from "./strategy/tyreGrade";
 
@@ -134,7 +136,48 @@ export function usePitwallData(eventId: string, initialTeamId: string | null, ac
     queryFn: async () => await fetchPitwallData(eventId, selectedTeamId!) as PitwallRpcResponse,
   });
 
-  const rpcData = rpcQuery.data;
+  /**
+   * Pollantwoorden kunnen in omgekeerde volgorde terugkomen. Houd het laatst
+   * geaccepteerde antwoord per event/team vast en negeer een aantoonbaar ouder
+   * antwoord; anders kan één trage request de al getoonde sectoren tijdelijk
+   * terugzetten. Een contextwissel (ander team/event) start een nieuwe reeks.
+   */
+  const orderedRpc = useRef<{ context: string; data: PitwallRpcResponse } | null>(null);
+  const rpcContext = `${eventId}:${selectedTeamId ?? ""}`;
+  const rawRpcData = rpcQuery.data;
+  if (orderedRpc.current && orderedRpc.current.context !== rpcContext) orderedRpc.current = null;
+  if (rawRpcData) {
+    const previous = orderedRpc.current?.data ?? null;
+    const asOrder = (value: PitwallRpcResponse | null): SnapshotOrder | null => value ? {
+      sessionId: typeof value.telemetry?.session_id === "string"
+        ? value.telemetry.session_id
+        : value.v3_normalized?.transportSessionId ?? null,
+      sequence: typeof value.telemetry?.sequence === "number" ? value.telemetry.sequence : null,
+      capturedAt: typeof value.telemetry?.captured_at === "string"
+        ? value.telemetry.captured_at
+        : value.v3_normalized?.capturedAt ?? null,
+    } : null;
+    if (previous && snapshotIsOlder(asOrder(previous), asOrder(rawRpcData))) {
+      traceSector("stale_poll_ignored", {
+        scope: rpcContext,
+        detail: {
+          previous_sequence: typeof previous.telemetry?.sequence === "number" ? previous.telemetry.sequence : null,
+          next_sequence: typeof rawRpcData.telemetry?.sequence === "number" ? rawRpcData.telemetry.sequence : null,
+        },
+      });
+    } else {
+      orderedRpc.current = { context: rpcContext, data: rawRpcData };
+      traceSector("snapshot_accepted", {
+        scope: rpcContext,
+        detail: {
+          previous_sequence: typeof previous?.telemetry?.sequence === "number" ? previous.telemetry.sequence : null,
+          next_sequence: typeof rawRpcData.telemetry?.sequence === "number" ? rawRpcData.telemetry.sequence : null,
+          count: Array.isArray(rawRpcData.v3_normalized?.paceHistory?.cars) ? rawRpcData.v3_normalized.paceHistory.cars.length : 0,
+        },
+      });
+    }
+  }
+  const rpcData = orderedRpc.current?.data ?? null;
   const receivedAt = rpcData?.telemetry?.received_at;
   const isLive = !rpcQuery.error && typeof receivedAt === "string" && now - Date.parse(receivedAt) < 10_000;
   const loading = rpcQuery.isLoading;

@@ -496,3 +496,23 @@ describe("rotation", () => {
     expect(plan.stints).toHaveLength(0);
   });
 });
+
+describe("gross pit visit is a benchmark, not the model transit", () => {
+  it("does not add service to the gross server median", () => {
+    const advice = advise(basisSnapshot({ pitLaneSeconds: 62.4, tyreSeconds: 30, secondsPerLitre: 1 }));
+    expect(advice.pitLoss?.pitLane).toBeNull();
+    expect(advice.pitLoss?.total).toBeNull();
+  });
+
+  it("uses only an explicitly service-free basis for computePitLoss", () => {
+    const advice = advise(basisSnapshot({
+      pitLaneSeconds: 62.4,
+      serviceFreePitLaneSeconds: 40,
+      tyreSeconds: 30,
+      secondsPerLitre: 1,
+    }));
+    expect(advice.pitLoss?.pitLane).toBe(40);
+    const service = Math.max(advice.pitLoss?.fuel ?? 0, advice.pitLoss?.tyre ?? 0);
+    expect(advice.pitLoss?.total).toBe(40 + service);
+  });
+});

@@ -137,6 +137,16 @@ describe("resolvePitStopMeasurement — server boven tijdlijn", () => {
     expect(meting.lastStopAt).toBe(t(700));
   });
 
+  it("houdt de laatste stop apart naast de servermediaan", () => {
+    const meting = resolvePitStopMeasurement({
+      pit_loss: { pitLaneSeconds: 40, sampleCount: 2, source: "measured", lastStopAt: t(70) },
+      timeline: eenStop().map((rij) => ({ captured_at: rij.captured_at, in_pit_lane: rij.in_pit_lane })),
+    });
+    expect(meting.pitLaneSeconds).toBe(40);
+    expect(meting.lastStop?.seconds).toBe(60);
+    expect(meting.lastStop?.exitAt).toBe(t(70));
+  });
+
   it("leidt uit de tijdlijn af als de server niets heeft", () => {
     const meting = resolvePitStopMeasurement({
       pit_loss: { pitLaneSeconds: null, sampleCount: 0, source: "none", lastStopAt: null },
@@ -155,7 +165,7 @@ describe("resolvePitStopMeasurement — server boven tijdlijn", () => {
 
   it("geeft none terug als er niets te meten valt", () => {
     const meting = resolvePitStopMeasurement({ pit_loss: null, pit_lane_seconds: null, timeline: [] });
-    expect(meting).toEqual({ pitLaneSeconds: null, sampleCount: 0, source: "none", lastStopAt: null, stops: [] });
+    expect(meting).toEqual({ pitLaneSeconds: null, sampleCount: 0, source: "none", lastStopAt: null, lastStop: null, stops: [] });
   });
 
   it("overleeft een leeg antwoord", () => {

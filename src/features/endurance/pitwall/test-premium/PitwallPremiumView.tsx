@@ -58,6 +58,8 @@ export interface PitwallPremiumViewProps {
   readOnly?: boolean;
   /** Koplabel; de testroute laat de bestaande tekst staan. */
   tag?: string;
+  /** Alleen Mijn Pitwall: persoonlijke, gemeten pitduur. Nooit op een share. */
+  pitDuration?: ReactNode;
 }
 
 /**
@@ -94,6 +96,7 @@ export function PitwallPremiumView({
   lastSeen,
   readOnly = false,
   tag = "PITWALL TEST",
+  pitDuration,
 }: PitwallPremiumViewProps) {
   // Driver names, online state and metric freshness must not reshape this layout.
   const sectorContext = JSON.stringify([
@@ -148,6 +151,14 @@ export function PitwallPremiumView({
       {/* Zonder live telemetrie geen bandenbeeld uit een oude meting naast een
           "geen advies"-beslissing. De band komt uit dezelfde live staat. */}
       <DecisionBand advice={{ ...strategyAdvice, tyreEstimate: live ? tyreEstimate : null }} />
+
+      {/* De gemeten pitduur is een aparte, bruto laatste-stop-benchmark. Hij
+          wordt nooit bij het model opgeteld en vervangt de modeltransit niet. */}
+      {!readOnly && pitDuration && (
+        <div className="ptp-pit-benchmark" data-pit-strategy-benchmark="gross">
+          {pitDuration}
+        </div>
+      )}
 
       <div className="ptp-main" data-pitwall-row="track-timing">
         <div className="ptp-track-col" data-pitwall-col="track">

@@ -1,0 +1,42 @@
+{
+  "title": "Schema-only production clone for the SimHub compatibility gate",
+  "capturedAt": "2026-11-21",
+  "source": {
+    "database": "postgres",
+    "serverVersion": "15.19",
+    "access": "ssh 3sm-docker + docker exec supabase-db, pg_dump --schema-only",
+    "schemas": ["public", "pitwall_learning"],
+    "rows": 0,
+    "owners": false,
+    "privileges": false
+  },
+  "fixture": "simhub-production-schema-20261121.sql.gz",
+  "fixtureSha256": "b840043175c6f73dada206eddcae403e14ce6f6e324f0862779c2a35aabd3d53",
+  "tables": 97,
+  "functions": 288,
+  "functionsStillAtProductionPreimage": [
+    {
+      "name": "simhub_persist_v3",
+      "signature": "public.simhub_persist_v3(text,text,bigint,timestamp with time zone,jsonb,text,jsonb,jsonb)",
+      "definitionMd5": "e15ef4a7bde6e876e835c406696283c6",
+      "owner": "supabase_admin",
+      "acl": "{supabase_admin=X/supabase_admin,postgres=X/supabase_admin,service_role=X/supabase_admin}"
+    },
+    {
+      "name": "simhub_pace_merge_v1",
+      "signature": "public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamp with time zone)",
+      "definitionMd5": "0f984dd59a233a499caa35e16a68515c",
+      "owner": "supabase_admin",
+      "acl": "{supabase_admin=X/supabase_admin,postgres=X/supabase_admin,service_role=X/supabase_admin}"
+    },
+    {
+      "name": "simhub_evidence_v1_valid",
+      "signature": "public.simhub_evidence_v1_valid(jsonb)",
+      "definitionMd5": "1fdab6c7c46ea98dc70e5f1386284ccd",
+      "owner": "supabase_admin",
+      "acl": "{supabase_admin=X/supabase_admin,postgres=X/supabase_admin,service_role=X/supabase_admin}"
+    }
+  ],
+  "loaderExclusions": ["views", "comments"],
+  "note": "Loaded into isolated PGlite; auth.role()/auth.uid() and auth.users(id,email) are stubs. No production row, owner or privilege was copied."
+}

@@ -106,6 +106,7 @@ namespace ThreeSM.EnduranceConnector
             var closed = _sampler.Drain();
 
             _pits.Update(sample);
+            EnqueuePitEdges();
             var visits = _pits.DrainCompleted();
 
             // Een bezoek is vanaf de intrede bekend. De lopende ronde krijgt het ID meteen,
@@ -146,6 +147,7 @@ namespace ThreeSM.EnduranceConnector
         {
             var code = string.IsNullOrEmpty(reason) ? "session_end" : reason;
             var visits = _pits == null ? new PitVisit[0] : _pits.Close(code);
+            EnqueuePitEdges();
             AttributeVisits(visits, new LapAggregate[0]);
 
             foreach (var anchor in _anchors == null ? new TyreAnchor[0] : _anchors.Drain())
@@ -236,6 +238,31 @@ namespace ThreeSM.EnduranceConnector
                 return lapNumber >= low && lapNumber <= high;
             }
             return lapNumber == (visit.EnterLap ?? visit.ExitLap).Value;
+        }
+
+        private void EnqueuePitEdges()
+        {
+            if (_pits == null) return;
+            foreach (var edge in _pits.DrainEdges())
+            {
+                var note = edge.ProblemNote();
+                var record = new MeasurementEventRecord
+                {
+                    EventUid = _ids.NewEventUid(),
+                    EventId = _ids.NextEventLabel(),
+                    Kind = edge.Kind,
+                    SegmentId = edge.SegmentId,
+                    PitVisitId = edge.PitVisitId,
+                    ObservedSessionId = edge.ObservedSessionId,
+                    ObservedAtUtc = edge.ObservedAtUtc,
+                    SessionTimeSeconds = edge.SessionTimeSeconds,
+                    SdkTick = edge.SdkTick,
+                    Confidence = edge.Valid ? 1.0 : 0.0,
+                    Evidence = new TyreEvidence("ir_sdk_onpitroad", new[] { "OnPitRoad" }, note)
+                };
+                string reason;
+                if (!_outbox.Enqueue(record, out reason)) _lastEnqueueProblem = "pit_edge_not_queued:" + reason;
+            }
         }
 
         private void EnqueueSummary(LapAggregate aggregate)

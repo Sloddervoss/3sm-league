@@ -339,3 +339,106 @@ export function sectorCountFromHistory(history: PaceHistory | null | undefined):
   }
   return counts.size === 1 ? [...counts][0] : 0;
 }
+
+/**
+ * Mag deze live sectorstand een bewezen volledige ronde vervangen?
+ *
+ * Alleen wanneer alle kolommen van dezelfde layout én dezelfde ronde een
+ * geldige tijd hebben. Eén ontbrekende of ongeldige sector is een gedeeltelijke
+ * stand: die mag de vorige complete ronde niet per kolom overschrijven, want
+ * dan zouden oude en nieuwe rondes in één rij terechtkomen. Een mengeling van
+ * ronden is om dezelfde reden nooit een vervanger.
+ */
+export function isCompleteLiveTiming(
+  timing: CarSectorTiming | null | undefined,
+  sectorCount: number,
+): boolean {
+  if (!timing || timing.mixedLaps) return false;
+  if (!Number.isInteger(sectorCount) || sectorCount < 1 || sectorCount > SECTOR_MAX_COUNT) return false;
+  if (timing.sectorCount !== sectorCount || timing.slots.length !== sectorCount) return false;
+  return timing.slots.every((slot) =>
+    slot != null
+    && slot.status !== "invalidated"
+    && slot.seconds != null
+    && Number.isFinite(slot.seconds)
+    && slot.seconds > 0
+  );
+}
+
+/** Eén weergegeven sectorcel: nieuwste live slot of een oudere bewezen cel. */
+export type ComposedSectorCell =
+  | { kind: "live"; slot: SectorSlot; lap: number; previous: boolean }
+  | { kind: "retained"; seconds: number; lap: number | null; previous: boolean }
+  | { kind: "missing" };
+
+export interface RetainedSectorLap {
+  seconds: number[];
+  lap: number | null;
+}
+
+/**
+ * Stelt per sectorIndex de nieuwste bruikbare cel samen.
+ *
+ * Een geverifieerde S1 van de nieuwe ronde mag direct verschijnen terwijl S2
+ * en S3 nog van de vorige ronde zijn. Elke cel draagt zijn eigen ronde; de
+ * oudere cellen krijgen `previous: true` en blijven met R-label zichtbaar.
+ * Er wordt nooit een complete ronde geclaimd als de rondes verschillen.
+ *
+ * Een live slot dat ouder is dan de bewaarde bewezen ronde verliest: een late
+ * of omgekeerde poll mag een nieuwere meting niet terugzetten.
+ */
+export function composeSectorCells(
+  timing: CarSectorTiming | null | undefined,
+  retained: RetainedSectorLap | null | undefined,
+  sectorCount: number,
+  invalidatedCells?: ReadonlySet<string> | null,
+): ComposedSectorCell[] {
+  const count = Number.isInteger(sectorCount) && sectorCount >= 1 && sectorCount <= SECTOR_MAX_COUNT ? sectorCount : 0;
+  if (count === 0) return [];
+  const live = timing && timing.sectorCount === count && timing.slots.length === count ? timing : null;
+  const cells: ComposedSectorCell[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const slot = live?.slots[index] ?? null;
+    const retainedSeconds = retained?.seconds[index];
+    const retainedLap = retained?.lap ?? null;
+    const liveUsable = slot != null && slot.status !== "invalidated" && slot.seconds != null && slot.seconds > 0;
+    const retainedUsable = typeof retainedSeconds === "number" && Number.isFinite(retainedSeconds) && retainedSeconds > 0;
+    const slotInvalidated = slot?.status === "invalidated"
+      || (slot != null && invalidatedCells?.has(`${slot.lap}:${index}`) === true);
+    if (slotInvalidated && slot != null) {
+      // Een bevestigde ongeldigheid is een uitspraak over deze sector. Hij mag
+      // niet alsnog uit een oudere bewaarde ronde worden gevuld, en een latere
+      // "geldige" kopie van dezelfde ronde maakt hem niet opnieuw geldig.
+      cells.push({ kind: "live", slot: { ...slot, status: "invalidated", seconds: null }, lap: slot.lap, previous: false });
+    } else if (liveUsable && (!retainedUsable || retainedLap == null || slot.lap >= retainedLap)) {
+      cells.push({ kind: "live", slot, lap: slot.lap, previous: false });
+    } else if (retainedUsable) {
+      cells.push({ kind: "retained", seconds: retainedSeconds, lap: retainedLap, previous: false });
+    } else {
+      cells.push({ kind: "missing" });
+    }
+  }
+  const newest = cells.reduce((max, cell) => (cell.kind !== "missing" && cell.lap != null ? Math.max(max, cell.lap) : max), 0);
+  return cells.map((cell) => (
+    cell.kind !== "missing" && cell.lap != null && newest > 0 && cell.lap < newest
+      ? { ...cell, previous: true }
+      : cell
+  ));
+}
+
+/** Hoogste ronde in een samengestelde rij, of null als er geen cel is. */
+export function composedLap(cells: ReadonlyArray<ComposedSectorCell>): number | null {
+  let lap: number | null = null;
+  for (const cell of cells) {
+    if (cell.kind === "missing" || cell.lap == null) continue;
+    if (lap == null || cell.lap > lap) lap = cell.lap;
+  }
+  return lap;
+}
+
+/** Zijn de cellen van meer dan één ronde? Dan is dit geen complete ronde. */
+export function isMixedComposedRow(cells: ReadonlyArray<ComposedSectorCell>): boolean {
+  const laps = new Set<number>();
+  for (const cell of cells) if (cell.kind !== "missing" && cell.lap != null) laps.add(cell.lap);
+  return laps.size > 1;
+}

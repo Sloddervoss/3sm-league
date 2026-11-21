@@ -3,7 +3,7 @@ import { ChevronRight, Flag, ListOrdered } from "lucide-react";
 import type { V3Normalized, V3Opponent } from "../pitwallHelpers";
 import { renderGap, renderPosition, type StandingsDerivation } from "../standings";
 import { freshMetrics, freshPaceHistory, rowSectors } from "../paceSeries";
-import { buildSectorTimingIndex } from "../sectorTiming";
+import { buildSectorTimingIndex, composedLap, composeSectorCells, isMixedComposedRow } from "../sectorTiming";
 import { SectorTimingCell } from "../SectorTimingCell";
 import { useRetainedLapSectors } from "../useRetainedLapSectors";
 import { preciseLapTime } from "../telemetryFormat";
@@ -235,15 +235,17 @@ export function PremiumTimingPanel({
     const timing = live ? sectorTimings?.get(r.id) ?? null : null;
     const legacySectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
     const legacyComplete = legacySectors?.length === sectorCount;
-    const usingSectorUpdates = timing != null && timing.sectorCount === sectorCount;
-    // Een live stand met een afwijkende layout mag een bewezen volledige ronde
-    // niet wegduwen: alleen de échte live weergave heeft voorrang.
-    const retainedLap = !usingSectorUpdates ? retained.laps.get(r.id) : undefined;
-    const sectors = !gap && retainedLap?.seconds.length === sectorCount ? retainedLap.seconds : null;
-    const prior = retainedLap?.lap != null && r.lap != null && r.lap > retainedLap.lap + 1;
+    // Per cel de nieuwste bruikbare stand: een nieuwe S1 mag direct staan,
+    // terwijl S2/S3 nog de vorige ronde zijn. Elke cel toont zijn eigen R.
+    const cachedBefore = retained.laps.get(r.id);
+    const retainedLap = cachedBefore?.seconds.length === sectorCount ? cachedBefore : undefined;
+    const cells = composeSectorCells(live ? timing : null, retainedLap, sectorCount, retained.invalidated.get(r.id));
+    const mixedRow = isMixedComposedRow(cells);
+    const newestLap = composedLap(cells);
+    const prior = newestLap != null && r.lap != null && r.lap > newestLap + 1;
     // Dimen betekent "niet meer de laatste afgeronde ronde" of "feed ligt stil",
     // nooit "de meting is vijf seconden oud".
-    const retainedStale = sectors != null && (!live || prior);
+    const retainedStale = retainedLap != null && (!live || prior);
     const metrics = freshMetrics(v3, r.id);
     // Zelfde ongeldigheidsgrens als de klassieke StandingsWidget: een
     // reset/tow-ronde mag ook niet via de verse PACE-meting als tijd
@@ -254,13 +256,11 @@ export function PremiumTimingPanel({
       : live && legacyComplete
         ? metrics?.lastLapSeconds ?? r.lastLapSeconds
         : r.lastLapSeconds;
-    const sectorTitle = usingSectorUpdates
-      ? undefined
-      : sectors && retainedLap
-        ? `Laatst geverifieerd${retainedLap.lap != null ? ` · ronde ${retainedLap.lap}` : ""}${!live ? " · bewaard na ontbrekende poll" : ""}`
-        : live && legacyComplete
-          ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
-          : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;
+    const sectorTitle = retainedLap
+      ? `Laatst geverifieerd${retainedLap.lap != null ? ` · ronde ${retainedLap.lap}` : ""}${!live ? " · bewaard na ontbrekende poll" : ""}`
+      : live && legacyComplete
+        ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
+        : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;
     const flashLap = !pinned && lapFlash[r.id] === r.lap ? r.lap : null;
     return (
       <tr
@@ -268,6 +268,7 @@ export function PremiumTimingPanel({
         data-premium-pinned-own-row={pinned ? "true" : undefined}
         data-pitwall-own-row={!pinned && r.isPlayer ? "true" : undefined}
         data-premium-own-row={!pinned && r.isPlayer ? "true" : undefined}
+        data-sector-mixed-laps={mixedRow ? "true" : undefined}
         className={r.isPlayer ? "is-own" : undefined}
       >
         <td className="ptp-col-pos" aria-label={r.position != null ? `Positie ${r.position}` : "Positie onbekend"}>
@@ -329,20 +330,20 @@ export function PremiumTimingPanel({
         {sectorCount === 0 && <td className="ptp-col-sector" title="Sectorindeling onbekend; geen tijden beschikbaar">—</td>}
         {sectorColumns.map((n) => (
           <td key={n} className="ptp-col-sector" data-sector-index={n} title={sectorTitle}>
-            {usingSectorUpdates
-              ? <SectorTimingCell slot={timing?.slots[n] ?? null} />
-              : sectors?.[n] != null && retainedLap
+            {cells[n]?.kind === "live"
+              ? <SectorTimingCell slot={cells[n].slot} className={cells[n].previous ? "opacity-60" : ""} />
+              : cells[n]?.kind === "retained"
                 ? (
                   <span
-                    data-sector-lap={retainedLap.lap ?? undefined}
+                    data-sector-lap={cells[n].lap ?? undefined}
                     data-sector-source="verified-lap"
-                    data-sector-previous={prior || undefined}
+                    data-sector-previous={cells[n].previous || prior || undefined}
                     data-retained-stale={retainedStale || undefined}
-                    className={prior || retainedStale ? "opacity-60" : undefined}
-                    title={retainedLap.lap == null ? undefined : `Laatst geverifieerd · ronde ${retainedLap.lap}`}
+                    className={cells[n].previous || prior || retainedStale ? "opacity-60" : undefined}
+                    title={cells[n].lap == null ? undefined : `Laatst geverifieerd · ronde ${cells[n].lap}`}
                   >
-                    <span data-sector-value="true">{sectors[n].toFixed(3)}</span>
-                    {retainedLap.lap != null && <span className="ptp-sector-lap-mark" data-sector-lap-mark={retainedLap.lap}>R{retainedLap.lap}</span>}
+                    <span data-sector-value="true">{cells[n].seconds.toFixed(3)}</span>
+                    {cells[n].lap != null && <span className="ptp-sector-lap-mark" data-sector-lap-mark={cells[n].lap}>R{cells[n].lap}</span>}
                   </span>
                 )
                 : "—"}

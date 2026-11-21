@@ -1,5 +1,10 @@
 # Opponent-sectorretentie — sparse PACE-veld
 
+> Vervolg 2026-11-21: dezelfde klacht bleef optreden. De volledige keten
+> (identiteitsreset, gedeeltelijke live-rij en SQL-`IS DISTINCT FROM`) staat in
+> `docs/operations/2026-11-21-sector-continuity-and-personal-pit-duration.md`.
+> Dit document blijft de eerste, presentatielaag-only fix.
+
 ## Symptoom (veldmelding)
 
 Live Pitwall, connector 0.7.6.4, 16 tegenstanders, één doorlopende stream:

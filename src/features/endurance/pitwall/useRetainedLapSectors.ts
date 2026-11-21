@@ -2,6 +2,7 @@ import { useState } from "react";
 import { completedLap, freshPaceHistory, persistedMetrics, rowSectors, trackSectorCount } from "./paceSeries";
 import type { V3Normalized } from "./pitwallHelpers";
 import { buildSectorTimingIndex, type CarSectorTiming } from "./sectorTiming";
+import { carRef, traceSector } from "./sectorTrace";
 import { geldigeLaatsteRonde } from "./standings";
 
 export type RetainedLapSectors = {
@@ -12,18 +13,37 @@ export type RetainedLapSectors = {
   observedAtMs: number;
 };
 
+/**
+ * Identiteit als losse, optionele delen. Een ontbrekend deel is "onbekend" en
+ * mag geen wissel bewijzen; alleen twee bekende, verschillende waarden doen dat.
+ * Zo kan een tussenframe zonder trackblok de bewezen sectoren niet wissen.
+ */
+type IdentityParts = {
+  transport: string | null;
+  trackId: number | null;
+  trackName: string | null;
+  config: string | null;
+};
+
 type State = {
   input: V3Normalized | null | undefined;
   /** Laatste niet-null frame; nodig om een bewaarde reeks nog aan een auto te koppelen. */
   lastInput: V3Normalized | null;
   context: string;
   /** Alleen transport/sessie/track-identiteit; nooit een meting. */
-  identity: string | null;
+  identity: IdentityParts | null;
   /** Laatste bekende PACE-segment; ontbrekende PACE mag dit niet wissen. */
   segment: string | null;
   clock: number | null;
   count: number;
   laps: Map<string, RetainedLapSectors>;
+  /**
+   * Bevestigde ongeldigheden per auto en ronde. Deze blijven binnen de sessie
+   * staan, ook als een later frame de invalidated-sector niet meer meezendt.
+   * Zonder dit kan een oudere meting de ongeldige ronde weer tot "bewezen"
+   * maken.
+   */
+  invalidated: Map<string, Set<string>>;
   stale: boolean;
 };
 
@@ -36,16 +56,54 @@ const empty = (input: State["input"], context: string): State => ({
   clock: null,
   count: 0,
   laps: new Map(),
+  invalidated: new Map(),
   stale: true,
 });
 
 /** Sessie/track-identiteit. Ontbrekende metadata is "onbekend", geen wissel. */
-const identityOf = (input: V3Normalized | null | undefined): string | null => {
+const nonEmpty = (value: string | null | undefined): string | null => {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const identityOf = (input: V3Normalized | null | undefined): IdentityParts | null => {
   if (!input) return null;
-  const track = input.identity?.trackId ?? input.identity?.trackName ?? null;
-  const config = input.identity?.trackConfig ?? null;
-  if (track == null && config == null && !input.transportSessionId) return null;
-  return JSON.stringify([input.transportSessionId ?? "", track ?? "", config ?? ""]);
+  const parts: IdentityParts = {
+    transport: nonEmpty(input.transportSessionId),
+    trackId: typeof input.identity?.trackId === "number" && Number.isFinite(input.identity.trackId)
+      ? input.identity.trackId
+      : null,
+    trackName: nonEmpty(input.identity?.trackName),
+    config: nonEmpty(input.identity?.trackConfig),
+  };
+  if (parts.transport == null && parts.trackId == null && parts.trackName == null && parts.config == null) {
+    return null;
+  }
+  return parts;
+};
+
+/** Alleen een component die aan beide kanten bekend is, kan een wissel bewijzen. */
+const identityChangedFrom = (previous: IdentityParts | null, next: IdentityParts | null): boolean => {
+  if (!previous || !next) return false;
+  if (previous.transport != null && next.transport != null && previous.transport !== next.transport) return true;
+  if (previous.trackId != null && next.trackId != null && previous.trackId !== next.trackId) return true;
+  // trackName is alleen leidend als geen van beide kanten een numeriek trackId heeft.
+  if (previous.trackId == null && next.trackId == null
+    && previous.trackName != null && next.trackName != null && previous.trackName !== next.trackName) return true;
+  if (previous.config != null && next.config != null && previous.config !== next.config) return true;
+  return false;
+};
+
+/** Onbekende delen laten de laatst bekende waarde staan; bekende delen vullen aan. */
+const mergeIdentity = (previous: IdentityParts | null, next: IdentityParts | null): IdentityParts | null => {
+  if (!previous) return next;
+  if (!next) return previous;
+  return {
+    transport: next.transport ?? previous.transport,
+    trackId: next.trackId ?? previous.trackId,
+    trackName: next.trackName ?? previous.trackName,
+    config: next.config ?? previous.config,
+  };
 };
 
 const segmentOf = (input: V3Normalized | null | undefined): string | null => {
@@ -109,13 +167,32 @@ function update(previous: State | null, input: State["input"], context: string, 
 
   // Alleen een *bevestigde* wissel wist de reeks. Ontbrekende track- of
   // segmentmetadata in één frame is onbekend, geen nieuwe sessie.
-  const identityChanged = previous != null && previous.context === context && previous.identity != null && identity != null && identity !== previous.identity;
+  const identityChanged = previous != null && previous.context === context && identityChangedFrom(previous.identity, identity);
   const segmentChanged = previous != null && previous.context === context && previous.segment != null && segment != null && segment !== previous.segment;
   const clockRewound = previous != null && previous.clock != null && clock != null && clock < previous.clock - 0.001;
   const layoutChanged = observedCount > 0 && previous != null && previous.count > 0 && observedCount !== previous.count;
   const reset = !previous || previous.context !== context || identityChanged || segmentChanged || clockRewound || layoutChanged;
+  const resetReason = !previous ? "first_frame"
+    : previous.context !== context ? "context"
+      : identityChanged ? "identity"
+        : segmentChanged ? "segment"
+          : clockRewound ? "clock"
+            : layoutChanged ? "layout"
+              : null;
+  if (resetReason && previous) {
+    traceSector("retained_reset", {
+      scope: context,
+      detail: {
+        reason: resetReason,
+        cars_before: previous.laps.size,
+        had_track: identity != null && (identity.trackId != null || identity.trackName != null),
+        observed_count: observedCount,
+      },
+    });
+  }
 
   const laps = new Map<string, RetainedLapSectors>(reset ? undefined : [...(previous?.laps ?? [])]);
+  const invalidated = new Map<string, Set<string>>(reset ? undefined : [...(previous?.invalidated ?? [])]);
 
   const opponents = (input.opponents ?? []).slice(0, 40);
   const live = buildSectorTimingIndex(history, opponents.map(o => ({ id: o.id, currentLap: o.lap })));
@@ -126,28 +203,69 @@ function update(previous: State | null, input: State["input"], context: string, 
     const metrics = persistedMetrics(input, o.id);
     const historyCar = history?.cars.find(car => car.id === o.id);
 
-    // Expliciete ongeldigheid wist alleen de reeks waar zij over gaat. Een
-    // reset of tow van de *lopende* ronde maakt de vorige bewezen ronde niet
-    // onwaar; die blijft als "laatst geverifieerd" staan.
-    const invalidatedLaps = new Set<number>();
+    // Bevestigde ongeldigheden worden in deze sessie onthouden. Een later
+    // frame dat de invalidated-sector niet meer bevat, maakt de ronde niet
+    // opnieuw geldig.
+    const seenInvalidated = new Set<string>(invalidated.get(o.id) ?? []);
     for (const sector of historyCar?.sectors ?? []) {
-      if (sector && sector.status === "invalidated" && Number.isInteger(sector.lap)) invalidatedLaps.add(sector.lap);
+      if (sector && sector.status === "invalidated" && Number.isInteger(sector.lap)) {
+        seenInvalidated.add(`${sector.lap}:${sector.sectorIndex}`);
+        invalidated.set(o.id, seenInvalidated);
+      }
     }
-    const invalidatedCachedLap = cached?.lap != null && invalidatedLaps.has(cached.lap);
+    const invalidatedCells = seenInvalidated;
+    const invalidatedCachedLap = cached?.lap != null
+      && [...invalidatedCells].some((key) => key.startsWith(`${cached.lap}:`));
     const cachedLapMarkedInvalid = cached?.lap != null && metrics?.lapValid === false && metrics.sectorLap === cached.lap;
     const cachedLapIsShortArtifact = cached?.lap != null && completed != null && completed === cached.lap &&
       o.lastLapSeconds != null && geldigeLaatsteRonde(o.lastLapSeconds, o.bestLapSeconds) == null;
-    const lapCounterWentBack = cached?.lap != null && completed != null && completed < cached.lap;
+    // Een lagere ronde is alleen een tellerreset als de meting niet
+    // aantoonbaar ouder is. Een out-of-order poll mag de nieuwere reeks niet
+    // wissen.
+    const lapCounterWentBack = cached?.lap != null && completed != null && completed < cached.lap
+      && (metrics?.observedSessionTimeSeconds == null || cached.observedSessionTime == null
+        || metrics.observedSessionTimeSeconds >= cached.observedSessionTime);
 
     if (invalidatedCachedLap || cachedLapMarkedInvalid || cachedLapIsShortArtifact || lapCounterWentBack) {
+      // Tijdelijke diagnose: waarom verdween deze cel? Alleen een gehashte
+      // auto-referentie en een vaste reden, nooit een naam of ruwe data.
+      traceSector("retained_lap_dropped", {
+        scope: context,
+        car: carRef(o.id),
+        lap: cached?.lap ?? null,
+        detail: {
+          reason: invalidatedCachedLap ? "invalidated"
+            : cachedLapMarkedInvalid ? "lap_marked_invalid"
+              : cachedLapIsShortArtifact ? "short_artifact"
+                : "lap_counter_back",
+          retained: cached?.seconds.length ?? 0,
+          observed_count: observedCount,
+        },
+      });
       laps.delete(o.id);
       continue;
     }
 
     // De live sectorstand is per sector nieuwer; bewaar hem als volledige
     // ronde zodat een tijdelijke lege stand de rij niet leegmaakt.
-    const liveSectors = liveLap(live.get(o.id));
-    if (liveSectors && newerThan({ lap: liveSectors.lap, observedSessionTime: clock }, cached)) {
+    const timing = live.get(o.id);
+    const liveSectors = liveLap(timing);
+    if (timing && !liveSectors) {
+      traceSector("live_partial_composed", {
+        scope: context,
+        car: carRef(o.id),
+        lap: timing.lap,
+        detail: {
+          slots: timing.slots.filter((slot) => slot?.seconds != null && slot.status !== "invalidated").length,
+          count: timing.sectorCount,
+          mixed_laps: timing.mixedLaps,
+          status: timing.status,
+        },
+      });
+    }
+    const liveLapInvalidated = liveSectors != null
+      && [...invalidatedCells].some((key) => key.startsWith(`${liveSectors.lap}:`));
+    if (liveSectors && !liveLapInvalidated && newerThan({ lap: liveSectors.lap, observedSessionTime: clock }, cached)) {
       laps.set(o.id, { seconds: liveSectors.seconds, lap: liveSectors.lap, observedSessionTime: clock, observedAtMs: nowMs });
       continue;
     }
@@ -156,7 +274,7 @@ function update(previous: State | null, input: State["input"], context: string, 
     if (!completedLapResult) continue;
     // Een expliciet ongeldig verklaarde ronde komt niet terug via een oudere
     // meting die dezelfde ronde nog als geldig in zijn slot heeft.
-    if (invalidatedLaps.has(completedLapResult.lap)) continue;
+    if ([...invalidatedCells].some((key) => key.startsWith(`${completedLapResult.lap}:`))) continue;
     const observed = metrics?.observedSessionTimeSeconds ?? clock ?? null;
     if (newerThan({ lap: completedLapResult.lap, observedSessionTime: observed }, cached)) {
       laps.set(o.id, {
@@ -182,11 +300,12 @@ function update(previous: State | null, input: State["input"], context: string, 
     input,
     lastInput: input,
     context,
-    identity: identity ?? (reset ? null : previous?.identity ?? null),
+    identity: reset ? identity : mergeIdentity(previous?.identity ?? null, identity),
     segment: segment ?? (reset ? null : previous?.segment ?? null),
     clock,
     count,
     laps,
+    invalidated,
     stale: !history || opponents.every(o => rowSectors(input, o.id, o.lastLapSeconds) == null && !persistedMetrics(input, o.id)),
   };
 }

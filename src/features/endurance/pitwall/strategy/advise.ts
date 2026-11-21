@@ -295,8 +295,13 @@ export function advise(snapshot: StrategySnapshot): Advice {
         ? Math.max(0, snapshot.tankCapacityLitres - snapshot.fuelLitres)
         : null;
 
+  // Alleen een bewezen servicevrije basis mag hier binnen. De servermediaan
+  // (`snapshot.pitLaneSeconds`) is bruto: daar zit service al in. Hem hier
+  // optellen bij de langzaamste service zou de service dubbel tellen en een
+  // te hoog "verlies" geven. Zonder servicevrije basis blijft het model
+  // expliciet onbekend; de bruto meting staat apart als benchmark.
   const pitLoss = computePitLoss({
-    pitLaneSeconds: snapshot.pitLaneSeconds,
+    pitLaneSeconds: snapshot.serviceFreePitLaneSeconds ?? null,
     fuelLitres: tanken,
     secondsPerLitre: snapshot.secondsPerLitre,
     tyreSeconds: snapshot.tyreSeconds,
