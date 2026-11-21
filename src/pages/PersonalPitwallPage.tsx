@@ -35,12 +35,14 @@ import { useTyreModel } from "@/features/endurance/pitwall/useTyreModel";
 import { withoutLiveTelemetry } from "@/features/endurance/pitwall/strategy";
 import { naarTyreEstimate } from "@/features/endurance/pitwall/strategy/tyreEstimateV2";
 import type { TyreEstimate } from "@/features/endurance/pitwall/strategy/tyreGrade";
+import { PitDurationPanel } from "@/features/personal-pitwall/PitDurationPanel";
 import {
   buildShareUrl,
   copyText,
   createPersonalShare,
   listMyPitwallDevices,
   loadOwnerDeviceDetail,
+  readPersonalPitVisits,
   revokePersonalShare,
   shareWithOs,
   type MyPitwallDevice,
@@ -637,7 +639,7 @@ export default function PersonalPitwallPage() {
                 gap={Boolean(detailQuery.error) || !tele}
                 lastSeen={relTime(detail.health?.received_at)}
                 tag="MIJN PITWALL"
-                showPitDuration
+                pitDuration={<PitDurationPanel deviceId={deviceId} enabled={live} load={readPersonalPitVisits} />}
               />
             </>
           )}

@@ -17,8 +17,6 @@ import { VehicleTelemetryPanel } from "../VehicleTelemetryPanel";
 import { TyreModelPanel } from "../TyreModelPanel";
 import { RawTelemetryDetails } from "../RawTelemetryDetails";
 import { PitStopAnchor } from "../PitStopAnchor";
-import { PitDurationPanel } from "@/features/personal-pitwall/PitDurationPanel";
-import { readPersonalPitVisits } from "@/features/personal-pitwall/share";
 import type { PacePoint } from "../PaceGraph";
 import { trackSectorCount } from "../paceSeries";
 import { PremiumMasthead } from "./PremiumMasthead";
@@ -61,7 +59,7 @@ export interface PitwallPremiumViewProps {
   /** Koplabel; de testroute laat de bestaande tekst staan. */
   tag?: string;
   /** Alleen Mijn Pitwall: persoonlijke, gemeten pitduur. Nooit op een share. */
-  showPitDuration?: boolean;
+  pitDuration?: ReactNode;
 }
 
 /**
@@ -98,7 +96,7 @@ export function PitwallPremiumView({
   lastSeen,
   readOnly = false,
   tag = "PITWALL TEST",
-  showPitDuration = false,
+  pitDuration,
 }: PitwallPremiumViewProps) {
   // Driver names, online state and metric freshness must not reshape this layout.
   const sectorContext = JSON.stringify([
@@ -167,9 +165,7 @@ export function PitwallPremiumView({
             bestLapSeconds={live ? v3?.timing?.bestLapTimeSeconds ?? null : null}
             gapToLeaderSeconds={live ? v3?.position?.gapToLeaderSeconds ?? null : null}
           />
-          {!readOnly && showPitDuration && (
-            <PitDurationPanel deviceId={deviceId} enabled={live} load={readPersonalPitVisits} />
-          )}
+          {!readOnly && pitDuration}
         </div>
 
         <div className="ptp-timing-col" data-pitwall-col="timing">
