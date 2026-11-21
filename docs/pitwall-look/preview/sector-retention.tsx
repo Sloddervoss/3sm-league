@@ -17,7 +17,7 @@ import { RaceTelemetryStrip } from "../../../src/features/endurance/pitwall/Race
 import { StandingsWidget } from "../../../src/features/endurance/pitwall/StandingsWidget";
 import { deriveStandings } from "../../../src/features/endurance/pitwall/standings";
 import type { V3Normalized, V3Opponent } from "../../../src/features/endurance/pitwall/pitwallHelpers";
-import type { PaceCar, PaceHistory } from "../../../supabase/functions/_shared/paceCapture";
+import type { PaceCar, PaceHistory, PaceSectorUpdate } from "../../../supabase/functions/_shared/paceCapture";
 import "../../../src/index.css";
 import "../../../src/features/endurance/pitwall/test-premium/testPremium.css";
 import "../../../src/features/endurance/pitwall/pitwallTimingResponsive.css";
@@ -75,13 +75,32 @@ const metric = (id: string, sectorLap: number, observed: number, sectors: number
   };
 };
 
-const car = (id: string, sectorLap: number, observed: number, sectors: number[] | null): PaceCar => ({
+const car = (
+  id: string,
+  sectorLap: number,
+  observed: number,
+  sectors: number[] | null,
+  live: PaceSectorUpdate[] = [],
+): PaceCar => ({
   id,
   laps: [],
   traces: [],
-  sectors: [],
+  sectors: live,
   sectorBests: [],
   metrics: metric(id, sectorLap, observed, sectors) as PaceCar["metrics"],
+});
+
+const liveUpdate = (id: string, lap: number, sectorIndex: number, seconds: number): PaceSectorUpdate => ({
+  id,
+  lap,
+  sectorIndex,
+  sectorCount: 3,
+  seconds,
+  completedSessionTimeSeconds: 560 + lap * 30 + sectorIndex,
+  observedSessionTimeSeconds: 560 + lap * 30 + sectorIndex + 0.4,
+  revision: 1,
+  status: "verified",
+  referenceSeconds: null,
 });
 
 const frame = (sessionTime: number, cars: PaceCar[], opponents: V3Opponent[]): V3Normalized => ({
@@ -144,6 +163,49 @@ const POLLS: Array<{ label: string; frame: V3Normalized }> = [
       car("albert", 2, 563, [39.1, 41.2, 44.1]),
       car("f0820", 4, 604, null),
     ], [...FIELD.filter((o) => o.id !== "car-10" && o.id !== "car-9" && o.id !== "car-8")].reverse()),
+  },
+  {
+    // Een tussenframe zonder trackidentiteit en met alleen de eigen PACE-auto.
+    // Dit is geen baanwissel: de bewezen reeksen moeten blijven staan.
+    label: "tussenframe · trackidentiteit ontbreekt, PACE sparse",
+    frame: (() => {
+      const next = frame(606, [car("player", 4, 605, [40.1, 40.2, 40.3])], FIELD);
+      next.identity = undefined;
+      return next;
+    })(),
+  },
+  {
+    label: "herstel · volledig frame, dezelfde sessie",
+    frame: frame(608, [
+      car("player", 4, 607, [40.1, 40.2, 40.3]),
+      car("leroy", 4, 607, [35.503, 52.35, 33.853]),
+      car("bart", 1, 527, [38.1, 40.2, 43.1]),
+      car("albert", 2, 567, [39.1, 41.2, 44.1]),
+      car("f0820", 3, 606, [36.5, 37.5, 38.5]),
+    ], FIELD),
+  },
+  {
+    // S1 van de volgende ronde is binnen, S2/S3 nog niet. De complete R3
+    // blijft als geheel staan; er ontstaat geen half-omgewisselde rij.
+    label: "gedeeltelijke live-rij · alleen S1 van R4",
+    frame: frame(610, [
+      car("player", 4, 609, [40.1, 40.2, 40.3]),
+      car("leroy", 4, 609, [35.503, 52.35, 33.853]),
+      car("bart", 1, 529, [38.1, 40.2, 43.1]),
+      car("albert", 2, 569, [39.1, 41.2, 44.1]),
+      car("f0820", 3, 610, [36.5, 37.5, 38.5], [liveUpdate("f0820", 4, 0, 36.2)]),
+    ], FIELD),
+  },
+  {
+    // Alle drie de sectoren dragen nu R4: de rij mag in één keer om.
+    label: "complete live-rij · S1–S3 van R4",
+    frame: frame(612, [
+      car("player", 4, 611, [40.1, 40.2, 40.3]),
+      car("leroy", 4, 611, [35.503, 52.35, 33.853]),
+      car("bart", 1, 531, [38.1, 40.2, 43.1]),
+      car("albert", 2, 571, [39.1, 41.2, 44.1]),
+      car("f0820", 4, 612, [36.2, 37.2, 38.2], [0, 1, 2].map((index) => liveUpdate("f0820", 4, index, 36.2 + index))),
+    ], FIELD),
   },
 ];
 

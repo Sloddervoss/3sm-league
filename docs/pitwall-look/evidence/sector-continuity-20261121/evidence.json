@@ -1,0 +1,1460 @@
+{
+  "ok": true,
+  "evidence": [
+    {
+      "step": "Poll 1/8 · seq 718 · 4 pace-auto's, 1 volledige set",
+      "poll": "0",
+      "data": {
+        "poll": "0",
+        "label": "Poll 1/8 · seq 718 · 4 pace-auto's, 1 volledige set",
+        "rows": 16,
+        "sectorCount": "3",
+        "kpi": "3",
+        "premium": {
+          "player": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "leroy": [
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen 0"
+            },
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen 0"
+            },
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen 0"
+            }
+          ],
+          "bart": [
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen onbekend"
+            },
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen onbekend"
+            },
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen onbekend"
+            }
+          ],
+          "albert": [
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen onbekend"
+            },
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen onbekend"
+            },
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen onbekend"
+            }
+          ],
+          "f0820": [
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen onbekend"
+            },
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen onbekend"
+            },
+            {
+              "value": null,
+              "lap": null,
+              "source": null,
+              "stale": false,
+              "title": "Geen gecontroleerde sectorreeks · bronafwijkingen onbekend"
+            }
+          ]
+        },
+        "classic": {
+          "77": [
+            {
+              "value": null,
+              "lap": null,
+              "stale": false
+            },
+            {
+              "value": null,
+              "lap": null,
+              "stale": false
+            },
+            {
+              "value": null,
+              "lap": null,
+              "stale": false
+            }
+          ],
+          "103": [
+            {
+              "value": null,
+              "lap": null,
+              "stale": false
+            },
+            {
+              "value": null,
+              "lap": null,
+              "stale": false
+            },
+            {
+              "value": null,
+              "lap": null,
+              "stale": false
+            }
+          ],
+          "134": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "stale": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "Poll 2/8 · seq 720 · 5 volledige sets in de opslag",
+      "poll": "1",
+      "data": {
+        "poll": "1",
+        "label": "Poll 2/8 · seq 720 · 5 volledige sets in de opslag",
+        "rows": 16,
+        "sectorCount": "3",
+        "kpi": "3",
+        "premium": {
+          "player": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "leroy": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "bart": [
+            {
+              "value": "38.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "40.200",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "43.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            }
+          ],
+          "albert": [
+            {
+              "value": "39.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "41.200",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "44.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            }
+          ],
+          "f0820": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": true,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": true,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": true,
+              "title": "Laatst geverifieerd · ronde 3"
+            }
+          ]
+        },
+        "classic": {
+          "77": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "stale": true
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "stale": true
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "stale": true
+            }
+          ],
+          "103": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "stale": false
+            }
+          ],
+          "134": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "stale": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "Poll 3/8 · seq 722 · f0820's slot weer mid-lap (4 sets)",
+      "poll": "2",
+      "data": {
+        "poll": "2",
+        "label": "Poll 3/8 · seq 722 · f0820's slot weer mid-lap (4 sets)",
+        "rows": 16,
+        "sectorCount": "3",
+        "kpi": "3",
+        "premium": {
+          "player": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "leroy": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "bart": [
+            {
+              "value": "38.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "40.200",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "43.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            }
+          ],
+          "albert": [
+            {
+              "value": "39.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "41.200",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "44.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            }
+          ],
+          "f0820": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": true,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": true,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": true,
+              "title": "Laatst geverifieerd · ronde 3"
+            }
+          ]
+        },
+        "classic": {
+          "77": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "stale": true
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "stale": true
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "stale": true
+            }
+          ],
+          "103": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "stale": false
+            }
+          ],
+          "134": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "stale": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "Poll 4/8 · 13 auto's · veld herschikt",
+      "poll": "3",
+      "data": {
+        "poll": "3",
+        "label": "Poll 4/8 · 13 auto's · veld herschikt",
+        "rows": 13,
+        "sectorCount": "3",
+        "kpi": "3",
+        "premium": {
+          "player": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "leroy": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "bart": [
+            {
+              "value": "38.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "40.200",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "43.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            }
+          ],
+          "albert": [
+            {
+              "value": "39.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "41.200",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "44.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            }
+          ],
+          "f0820": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            }
+          ]
+        },
+        "classic": {
+          "77": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "stale": false
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "stale": false
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "stale": false
+            }
+          ],
+          "103": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "stale": false
+            }
+          ],
+          "134": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "stale": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "Poll 5/8 · tussenframe · trackidentiteit ontbreekt, PACE sparse",
+      "poll": "4",
+      "data": {
+        "poll": "4",
+        "label": "Poll 5/8 · tussenframe · trackidentiteit ontbreekt, PACE sparse",
+        "rows": 16,
+        "sectorCount": "3",
+        "kpi": "3",
+        "premium": {
+          "player": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "leroy": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "bart": [
+            {
+              "value": "38.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "40.200",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "43.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            }
+          ],
+          "albert": [
+            {
+              "value": "39.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "41.200",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "44.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            }
+          ],
+          "f0820": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            }
+          ]
+        },
+        "classic": {
+          "77": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "stale": false
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "stale": false
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "stale": false
+            }
+          ],
+          "103": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "stale": false
+            }
+          ],
+          "134": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "stale": false
+            }
+          ]
+        }
+      },
+      "traceCodes": []
+    },
+    {
+      "step": "Poll 6/8 · herstel · volledig frame, dezelfde sessie",
+      "poll": "5",
+      "data": {
+        "poll": "5",
+        "label": "Poll 6/8 · herstel · volledig frame, dezelfde sessie",
+        "rows": 16,
+        "sectorCount": "3",
+        "kpi": "3",
+        "premium": {
+          "player": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "leroy": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "bart": [
+            {
+              "value": "38.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "40.200",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "43.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            }
+          ],
+          "albert": [
+            {
+              "value": "39.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "41.200",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "44.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            }
+          ],
+          "f0820": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            }
+          ]
+        },
+        "classic": {
+          "77": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "stale": false
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "stale": false
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "stale": false
+            }
+          ],
+          "103": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "stale": false
+            }
+          ],
+          "134": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "stale": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "step": "Poll 7/8 · gedeeltelijke live-rij · alleen S1 van R4",
+      "poll": "6",
+      "data": {
+        "poll": "6",
+        "label": "Poll 7/8 · gedeeltelijke live-rij · alleen S1 van R4",
+        "rows": 16,
+        "sectorCount": "3",
+        "kpi": "3",
+        "premium": {
+          "player": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "leroy": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "bart": [
+            {
+              "value": "38.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "40.200",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "43.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            }
+          ],
+          "albert": [
+            {
+              "value": "39.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "41.200",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "44.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            }
+          ],
+          "f0820": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 3"
+            }
+          ]
+        },
+        "classic": {
+          "77": [
+            {
+              "value": "36.500",
+              "lap": "3",
+              "stale": false
+            },
+            {
+              "value": "37.500",
+              "lap": "3",
+              "stale": false
+            },
+            {
+              "value": "38.500",
+              "lap": "3",
+              "stale": false
+            }
+          ],
+          "103": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "stale": false
+            }
+          ],
+          "134": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "stale": false
+            }
+          ]
+        }
+      },
+      "traceCodes": [
+        "live_partial_ignored",
+        "live_partial_ignored",
+        "live_partial_ignored"
+      ]
+    },
+    {
+      "step": "Poll 8/8 · complete live-rij · S1–S3 van R4",
+      "poll": "7",
+      "data": {
+        "poll": "7",
+        "label": "Poll 8/8 · complete live-rij · S1–S3 van R4",
+        "rows": 16,
+        "sectorCount": "3",
+        "kpi": "3",
+        "premium": {
+          "player": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "leroy": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 4"
+            }
+          ],
+          "bart": [
+            {
+              "value": "38.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "40.200",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            },
+            {
+              "value": "43.100",
+              "lap": "1",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 1"
+            }
+          ],
+          "albert": [
+            {
+              "value": "39.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "41.200",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            },
+            {
+              "value": "44.100",
+              "lap": "2",
+              "source": "verified-lap",
+              "stale": false,
+              "title": "Laatst geverifieerd · ronde 2"
+            }
+          ],
+          "f0820": [
+            {
+              "value": "36.200",
+              "lap": "4",
+              "source": "live",
+              "stale": false,
+              "title": null
+            },
+            {
+              "value": "37.200",
+              "lap": "4",
+              "source": "live",
+              "stale": false,
+              "title": null
+            },
+            {
+              "value": "38.200",
+              "lap": "4",
+              "source": "live",
+              "stale": false,
+              "title": null
+            }
+          ]
+        },
+        "classic": {
+          "77": [
+            {
+              "value": null,
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": null,
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": null,
+              "lap": "4",
+              "stale": false
+            }
+          ],
+          "103": [
+            {
+              "value": "35.503",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "52.350",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "33.853",
+              "lap": "4",
+              "stale": false
+            }
+          ],
+          "134": [
+            {
+              "value": "40.100",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.200",
+              "lap": "4",
+              "stale": false
+            },
+            {
+              "value": "40.300",
+              "lap": "4",
+              "stale": false
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "errors": []
+}
