@@ -163,7 +163,9 @@ Gebeurtenissen (geen namen, auth, tokens of ruwe telemetrie):
 - `retained_reset` — `reason` (`context`, `identity`, `segment`, `clock`,
   `layout`), aantal auto's vóór de reset, of track bekend was;
 - `live_partial_ignored` — aantal gevulde slots, layout, `mixed_laps`, status;
-- auto's alleen als niet-omkeerbare 8-teken `carRef`.
+- auto's alleen als niet-omkeerbare 8-teken `carRef`; de context (`scope`) is
+  om dezelfde reden een 8-teken contextref, geen leesbare sessie- of
+  coureursnaam.
 
 Zonder de vlag doet `sectorTrace.ts` niets: geen console, geen buffer. De
 buffer is begrensd op 200 en wordt na 24 uur niet bewaard (geen opslag).

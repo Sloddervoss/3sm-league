@@ -63,7 +63,9 @@ describe("sector diagnostic trace", () => {
     const events = window.__pitwallSectorTrace!.dump();
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ code: "live_partial_ignored", car: ref, lap: 4 });
+    expect(events[0].scope).toMatch(/^[0-9a-f]{8}$/);
     expect(JSON.stringify(events[0])).not.toContain("Leroy");
+    expect(JSON.stringify(events[0])).not.toContain("device|session");
     expect(debug).toHaveBeenCalledTimes(1);
 
     for (let index = 0; index < SECTOR_TRACE_LIMIT + 25; index += 1) {

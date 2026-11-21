@@ -94,7 +94,9 @@ export function traceSector(
   const event: SectorTraceEvent = {
     at: new Date().toISOString(),
     code: code.slice(0, 40),
-    scope: (fields.scope || "unknown").slice(0, 64),
+    // Ook de context kan een coureurnaam bevatten (de personal contextKey).
+    // Bewaar alleen een korte, niet-omkeerbare referentie.
+    scope: carRef(fields.scope || "unknown") ?? "unknown",
     car: fields.car?.slice(0, 8),
     lap: typeof fields.lap === "number" && Number.isFinite(fields.lap) ? fields.lap : null,
     detail: cleanDetail(fields.detail),
