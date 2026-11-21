@@ -167,6 +167,9 @@ export function PitwallPremiumView({
             bestLapSeconds={live ? v3?.timing?.bestLapTimeSeconds ?? null : null}
             gapToLeaderSeconds={live ? v3?.position?.gapToLeaderSeconds ?? null : null}
           />
+          {!readOnly && showPitDuration && (
+            <PitDurationPanel deviceId={deviceId} enabled={live} load={readPersonalPitVisits} />
+          )}
         </div>
 
         <div className="ptp-timing-col" data-pitwall-col="timing">
@@ -214,11 +217,6 @@ export function PitwallPremiumView({
         )}
         {!readOnly &&
           panel("pitstop", <PitStopAnchor source={deviceSource} enabled showExample />)}
-        {!readOnly && showPitDuration &&
-          panel(
-            "pit-duration",
-            <PitDurationPanel deviceId={deviceId} enabled={live} load={readPersonalPitVisits} />,
-          )}
       </div>
 
       {!readOnly && (
