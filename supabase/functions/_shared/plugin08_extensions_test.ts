@@ -415,3 +415,52 @@ Deno.test("P08-10 een oude V1/V2-payload blijft ongewijzigd", () => {
   if (parsed.timing.completedLaps !== 17) throw new Error("completedLaps veranderd");
   if (parsed.measurementEvents) throw new Error("V1 mag geen meetreeksen hebben");
 });
+
+// ---------------------------------------------------------------------------
+// Expliciete pit_in/pit_out-flanken uit de connector-outbox.
+// ---------------------------------------------------------------------------
+
+const pitEdge = (kind: "pit_in" | "pit_out", sequence: number) => ({
+  eventUid: uid(sequence),
+  eventId: `evt-${sequence}`,
+  kind,
+  segmentId: "seg-abc",
+  pitVisitId: "pit-seg-abc-1",
+  observedSessionId: "sim-42-s1",
+  observedAt: "2026-11-21T12:00:00.000Z",
+  sessionTimeSeconds: 100 + sequence,
+  sdkTick: 106000 + sequence * 60,
+  evidence: { version: 1, source: "ir_sdk_onpitroad", channels: ["OnPitRoad"] },
+  confidence: 1,
+  recordRevision: 1,
+});
+
+Deno.test("parseMeasurementEvent accepts the explicit pit edge wire shape", () => {
+  const entry = parseMeasurementEvent(pitEdge("pit_in", 1), 0);
+  const exit = parseMeasurementEvent(pitEdge("pit_out", 2), 1);
+  if (entry.kind !== "pit_in" || exit.kind !== "pit_out") throw new Error("kind lost");
+  if (entry.pitVisitId !== "pit-seg-abc-1" || exit.pitVisitId !== entry.pitVisitId) throw new Error("visit id lost");
+  if (entry.confidence !== 1 || entry.evidence?.source !== "ir_sdk_onpitroad") throw new Error("quality lost");
+  if (entry.sessionTimeSeconds !== 101 || exit.sessionTimeSeconds !== 102) throw new Error("source time lost");
+  if (entry.sdkTick !== 106060 || exit.sdkTick !== 106120) throw new Error("tick lost");
+});
+
+Deno.test("parseMeasurementEvent keeps a legacy wear/pit_service event unchanged", () => {
+  const legacy = {
+    eventUid: uid(3),
+    kind: "pit_service_completed",
+    pitVisitId: "pit-legacy-1",
+    observedAt: "2026-10-31T12:00:00.000Z",
+    sessionTimeSeconds: 900,
+    sdkTick: 90000,
+    wearBefore: wear(12.5),
+    wearAfter: wear(100),
+    setGeneration: setGen(),
+    evidence: evidence(),
+    confidence: 0.9,
+    recordRevision: 1,
+  };
+  const parsed = parseMeasurementEvent(legacy, 0);
+  if (parsed.kind !== "pit_service_completed" || parsed.wearAfter?.fl !== 100) throw new Error("legacy row changed");
+  if (parsed.confidence !== 0.9) throw new Error("legacy confidence changed");
+});

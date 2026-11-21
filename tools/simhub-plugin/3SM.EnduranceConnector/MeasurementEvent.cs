@@ -382,12 +382,11 @@ namespace ThreeSM.EnduranceConnector
                 SupersedesEventUid = MeasurementIds.IsUid(SupersedesEventUid) ? SupersedesEventUid : null
             };
             if (Evidence != null) dto.Evidence = Evidence.ToDto();
-            // Een wear-waarneming zonder bewijs of confidence is volgens het contract
-            // geen waarneming. We sturen hem dan ook niet: validatie weigert hem eerst.
-            if (dto.WearBefore != null || dto.WearAfter != null)
-            {
-                dto.Confidence = Confidence;
-            }
+            // Confidence is ook voor niet-wear-flanken (pit_in/pit_out) een
+            // expliciet oordeel: 1 = schone bronflank, 0 = afgekeurd met reden.
+            // Zonder deze regel zou de Edge de 0 nooit zien en een onbruikbare
+            // flank als meting accepteren.
+            dto.Confidence = Confidence;
             return dto;
         }
 

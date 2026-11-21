@@ -94,6 +94,45 @@ namespace ThreeSM.EnduranceConnector
     }
 
     /// <summary>
+    /// Eén expliciete pitflank met de bron-tijdstempels van die tick.
+    ///
+    /// De entry en exit zijn echte, door de connector waargenomen
+    /// <c>OnPitRoad</c>-overgangen. Ze worden direct in de duurzame
+    /// meet-outbox gezet; de database pairt later alleen twee edges met
+    /// dezelfde device/observed-sessie/pitVisitId. Een ontbrekende flank is
+    /// geen geschatte flank en levert dus geen duur.
+    /// </summary>
+    public sealed class PitEdge
+    {
+        public string Kind { get; set; }
+        public string PitVisitId { get; set; }
+        public string SegmentId { get; set; }
+        public string ObservedSessionId { get; set; }
+        public DateTime ObservedAtUtc { get; set; }
+        public double? SessionTimeSeconds { get; set; }
+        public long? SdkTick { get; set; }
+        public int? Lap { get; set; }
+        public bool? ResetOrTow { get; set; }
+        public bool? InPitStall { get; set; }
+        public List<string> Problems { get; private set; }
+
+        public PitEdge()
+        {
+            Problems = new List<string>();
+        }
+
+        /// <summary>Alleen een schone flank mag als meting tellen.</summary>
+        public bool Valid { get { return Problems.Count == 0; } }
+
+        public string ProblemNote()
+        {
+            if (Problems.Count == 0) return null;
+            var text = string.Join("|", Problems.ToArray());
+            return text.Length <= 200 ? text : text.Substring(0, 200);
+        }
+    }
+
+    /// <summary>
     /// Eén pitbezoek. <see cref="PitVisitId"/> is context (het verbindt waarnemingen),
     /// geen identiteit: het contract zegt expliciet dat twee waarnemingen in hetzelfde
     /// bezoek twee rijen zijn.
@@ -113,6 +152,14 @@ namespace ThreeSM.EnduranceConnector
         public PitIntent Intent { get; set; }
         public PitResult Result { get; set; }
         public List<string> Problems { get; private set; }
+        /// <summary>Er is in deze sessie een expliciete "niet in de pit" gezien vóór de entry.</summary>
+        public bool EntryConfirmed { get; set; }
+        public bool PitFlagUnknown { get; set; }
+        public bool ResetOrTowObserved { get; set; }
+        public bool ResetOrTowUnknown { get; set; }
+        public double? MaxSampleGapSeconds { get; set; }
+        public DateTime? LastSampleAtUtc { get; set; }
+        public double? LastSessionTimeSeconds { get; set; }
 
         public PitVisit()
         {
@@ -146,12 +193,16 @@ namespace ThreeSM.EnduranceConnector
     {
         /// <summary>Onder deze marge is een niveauverschil geen tanking maar ruis.</summary>
         public const double FuelDeltaToleranceLitres = 0.01;
+        /// <summary>Een gat groter dan dit binnen één bezoek is geen continue flank.</summary>
+        public const double MaxEdgeTelemetryGapSeconds = 5.0;
 
         private readonly List<PitVisit> _completed = new List<PitVisit>();
+        private readonly List<PitEdge> _edges = new List<PitEdge>();
         private readonly string _segmentToken;
         private PitVisit _current;
         private int _visitCounter;
         private bool _onPitRoad;
+        private bool _sawExplicitNotInPit;
         private string _segmentId;
         private TelemetrySample _lastSample;
 
@@ -163,6 +214,15 @@ namespace ThreeSM.EnduranceConnector
         public PitVisit Current { get { return _current; } }
         public int VisitCount { get { return _visitCounter; } }
 
+        /// <summary>De expliciete pitflanken die nog niet naar de outbox zijn gegaan.</summary>
+        public IList<PitEdge> DrainEdges()
+        {
+            if (_edges.Count == 0) return new PitEdge[0];
+            var copy = _edges.ToArray();
+            _edges.Clear();
+            return copy;
+        }
+
         /// <summary>Eén tick. De flank van de ruwe <c>OnPitRoad</c> opent en sluit een bezoek.</summary>
         public void Update(TelemetrySample sample)
         {
@@ -171,11 +231,20 @@ namespace ThreeSM.EnduranceConnector
 
             if (DifferentSession(sample))
             {
-                CloseCurrent(_lastSample.ObservedAtUtc, "session_changed");
+                // Een sessiewissel is geen pit-uit. De open entry blijft een orphan
+                // en levert dus nooit een verzonnen duur.
+                CloseCurrent(_lastSample.ObservedAtUtc, "session_changed", false);
                 _segmentId = sample.SegmentId;
+                _sawExplicitNotInPit = false;
             }
 
-            if (!sample.OnPitRoad.HasValue) return;
+            if (!sample.OnPitRoad.HasValue)
+            {
+                // Onbekend is niet false. Een open bezoek mag hier niet door
+                // worden afgesloten, maar is ook niet meer continu.
+                if (_current != null) _current.PitFlagUnknown = true;
+                return;
+            }
             var onPitRoad = sample.OnPitRoad.Value;
 
             if (onPitRoad && !_onPitRoad) Open(sample);
@@ -184,9 +253,10 @@ namespace ThreeSM.EnduranceConnector
                 // De tick waarin de auto de pitstraat verlaat hoort nog bij het bezoek:
                 // daar staan de uitgangsronde, het uittijdstip en de laatste brandstof in.
                 Observe(sample);
-                CloseCurrent(sample.ObservedAtUtc, null);
+                CloseCurrent(sample.ObservedAtUtc, null, true);
             }
             _onPitRoad = onPitRoad;
+            if (!onPitRoad) _sawExplicitNotInPit = true;
 
             if (_current != null) Observe(sample);
         }
@@ -203,7 +273,7 @@ namespace ThreeSM.EnduranceConnector
         /// <summary>Sluit een open bezoek bij sessie-einde of plugin-shutdown.</summary>
         public IList<PitVisit> Close(string reason)
         {
-            if (_current != null) CloseCurrent(_lastSample == null ? DateTime.UtcNow : _lastSample.ObservedAtUtc, reason);
+            if (_current != null) CloseCurrent(_lastSample == null ? DateTime.UtcNow : _lastSample.ObservedAtUtc, reason, false);
             return DrainCompleted();
         }
 
@@ -211,7 +281,9 @@ namespace ThreeSM.EnduranceConnector
         {
             _current = null;
             _completed.Clear();
+            _edges.Clear();
             _onPitRoad = false;
+            _sawExplicitNotInPit = false;
             _lastSample = null;
             _segmentId = null;
         }
@@ -235,17 +307,40 @@ namespace ThreeSM.EnduranceConnector
                 EnterLap = sample.LapNumber,
                 EnteredAtUtc = sample.ObservedAtUtc,
                 EnterSessionTimeSeconds = sample.SessionTimeSeconds,
-                EnterSdkTick = sample.SdkTick
+                EnterSdkTick = sample.SdkTick,
+                EntryConfirmed = _sawExplicitNotInPit,
+                LastSampleAtUtc = sample.ObservedAtUtc,
+                LastSessionTimeSeconds = sample.SessionTimeSeconds
             };
             visit.Result.FuelBeforeLitres = sample.FuelLitres;
             _current = visit;
             Observe(sample);
+            if (visit.EntryConfirmed) EmitEntry(visit, sample);
         }
 
         private void Observe(TelemetrySample sample)
         {
             var visit = _current;
             if (visit == null) return;
+
+            // Continuïteit van de flank zelf: een gat, een teruglopende klok of
+            // een onbekende vlag maakt de tijd tussen entry en exit onbruikbaar.
+            if (visit.LastSampleAtUtc.HasValue)
+            {
+                var wallGap = (sample.ObservedAtUtc - visit.LastSampleAtUtc.Value).TotalSeconds;
+                if (wallGap < -0.001) visit.Problems.Add("clock_rewound");
+                var between = wallGap >= 0 ? wallGap : 0;
+                if (visit.MaxSampleGapSeconds == null || between > visit.MaxSampleGapSeconds.Value)
+                    visit.MaxSampleGapSeconds = between;
+            }
+            if (visit.LastSessionTimeSeconds.HasValue && sample.SessionTimeSeconds.HasValue
+                && sample.SessionTimeSeconds.Value < visit.LastSessionTimeSeconds.Value - 0.001)
+                visit.Problems.Add("session_clock_rewound");
+            visit.LastSampleAtUtc = sample.ObservedAtUtc;
+            visit.LastSessionTimeSeconds = sample.SessionTimeSeconds;
+
+            if (sample.ResetOrTow == true) visit.ResetOrTowObserved = true;
+            else if (!sample.ResetOrTow.HasValue) visit.ResetOrTowUnknown = true;
 
             if (sample.PitServiceFlagsRaw.HasValue)
             {
@@ -277,7 +372,70 @@ namespace ThreeSM.EnduranceConnector
             visit.ExitSdkTick = sample.SdkTick ?? visit.ExitSdkTick;
         }
 
-        private void CloseCurrent(DateTime atUtc, string reason)
+        private void EmitEntry(PitVisit visit, TelemetrySample sample)
+        {
+            var edge = new PitEdge
+            {
+                Kind = "pit_in",
+                PitVisitId = visit.PitVisitId,
+                SegmentId = visit.SegmentId,
+                ObservedSessionId = sample.ObservedSessionId,
+                ObservedAtUtc = visit.EnteredAtUtc,
+                SessionTimeSeconds = visit.EnterSessionTimeSeconds,
+                SdkTick = visit.EnterSdkTick,
+                Lap = visit.EnterLap,
+                ResetOrTow = sample.ResetOrTow,
+                InPitStall = sample.InPitStall
+            };
+            if (!visit.EntryConfirmed) edge.Problems.Add("entry_not_observed");
+            if (!edge.SessionTimeSeconds.HasValue) edge.Problems.Add("session_time_missing");
+            if (!edge.SdkTick.HasValue) edge.Problems.Add("sdk_tick_missing");
+            if (sample.ResetOrTow == true) edge.Problems.Add("reset_or_tow");
+            _edges.Add(edge);
+        }
+
+        private void EmitExit(PitVisit visit)
+        {
+            var edge = new PitEdge
+            {
+                Kind = "pit_out",
+                PitVisitId = visit.PitVisitId,
+                SegmentId = visit.SegmentId,
+                ObservedSessionId = _lastSample == null ? null : _lastSample.ObservedSessionId,
+                ObservedAtUtc = visit.ExitedAtUtc ?? visit.EnteredAtUtc,
+                SessionTimeSeconds = visit.ExitSessionTimeSeconds,
+                SdkTick = visit.ExitSdkTick,
+                Lap = visit.ExitLap,
+                ResetOrTow = _lastSample == null ? null : _lastSample.ResetOrTow,
+                InPitStall = _lastSample == null ? null : _lastSample.InPitStall
+            };
+            if (!visit.EntryConfirmed) edge.Problems.Add("entry_not_observed");
+            if (!edge.SessionTimeSeconds.HasValue || !visit.EnterSessionTimeSeconds.HasValue)
+                edge.Problems.Add("session_time_missing");
+            if (!edge.SdkTick.HasValue || !visit.EnterSdkTick.HasValue)
+                edge.Problems.Add("sdk_tick_missing");
+            else if (edge.SdkTick.Value <= visit.EnterSdkTick.Value)
+                edge.Problems.Add("sdk_tick_not_monotone");
+            if (edge.SessionTimeSeconds.HasValue && visit.EnterSessionTimeSeconds.HasValue)
+            {
+                var seconds = edge.SessionTimeSeconds.Value - visit.EnterSessionTimeSeconds.Value;
+                if (seconds < 5 || seconds > 900) edge.Problems.Add("duration_out_of_bounds");
+            }
+            if (visit.MaxSampleGapSeconds.HasValue && visit.MaxSampleGapSeconds.Value > MaxEdgeTelemetryGapSeconds)
+                edge.Problems.Add("telemetry_gap");
+            if (visit.PitFlagUnknown) edge.Problems.Add("pit_flag_unknown");
+            if (visit.ResetOrTowObserved || (edge.ResetOrTow == true)) edge.Problems.Add("reset_or_tow");
+            else if (visit.ResetOrTowUnknown || !edge.ResetOrTow.HasValue) edge.Problems.Add("tow_unknown");
+            foreach (var problem in visit.Problems)
+            {
+                if (problem == "lap_number_reset_in_visit" || problem == "clock_rewound"
+                    || problem == "session_clock_rewound" || problem == "session_changed")
+                    edge.Problems.Add(problem);
+            }
+            _edges.Add(edge);
+        }
+
+        private void CloseCurrent(DateTime atUtc, string reason, bool explicitExit)
         {
             var visit = _current;
             if (visit == null) return;
@@ -286,6 +444,7 @@ namespace ThreeSM.EnduranceConnector
             ComputeFuelDelta(visit);
             if (visit.ExitLap.HasValue && visit.EnterLap.HasValue && visit.ExitLap.Value < visit.EnterLap.Value)
                 visit.Problems.Add("lap_number_reset_in_visit");
+            if (explicitExit) EmitExit(visit);
             _completed.Add(visit);
             _current = null;
         }
