@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { SimHubDeviceDetail } from "@/features/control-room/connectors/types";
 import type { V3Normalized } from "@/features/endurance/pitwall/pitwallHelpers";
 import type { PaceCar, PaceHistory } from "../../../supabase/functions/_shared/paceCapture";
+import { parsePersonalPitVisits, type PersonalPitFeed } from "@/features/personal-pitwall/pitVisits";
 import { takeCapturedShareToken } from "@/lib/shareTokenBootstrap";
 
 /**
@@ -143,6 +144,20 @@ export async function loadOwnerDeviceDetail(deviceId: string): Promise<SimHubDev
   const { data, error } = await ownerRpc("pitwall_owner_device_detail_v2", { p_device_id: deviceId });
   if (error) throw asRpcError(error);
   return data as SimHubDeviceDetail;
+}
+
+/**
+ * Persoonlijke, afgeronde pitbezoeken voor één device in de huidige sessie.
+ * De server rekent de duur uit de bron-tijdstempels van de pitflanken; deze
+ * client doet geen tweede berekening en gebruikt de waarde nooit voor advies.
+ */
+export async function readPersonalPitVisits(deviceId: string): Promise<PersonalPitFeed> {
+  const { data, error } = await ownerRpc("pitwall_personal_pit_visits_v1", {
+    p_device_id: deviceId,
+    p_limit: 5,
+  });
+  if (error) throw asRpcError(error);
+  return parsePersonalPitVisits(data);
 }
 
 export async function createPersonalShare(deviceId: string, ttlSeconds = 14400): Promise<ShareCreateResult> {

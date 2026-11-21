@@ -637,6 +637,7 @@ export default function PersonalPitwallPage() {
                 gap={Boolean(detailQuery.error) || !tele}
                 lastSeen={relTime(detail.health?.received_at)}
                 tag="MIJN PITWALL"
+                showPitDuration
               />
             </>
           )}
