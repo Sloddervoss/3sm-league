@@ -1,6 +1,8 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { PaceCar, PaceHistory, PaceSectorUpdate } from "../../../../supabase/functions/_shared/paceCapture";
+import type { SharedRace, SharedSectorCar } from "@/features/personal-pitwall/share";
+import { sharedViewerV3 } from "@/features/personal-pitwall/share";
 import { PremiumTimingPanel } from "./test-premium/PremiumTimingPanel";
 import { StandingsWidget } from "./StandingsWidget";
 import { deriveStandings } from "./standings";
@@ -131,6 +133,38 @@ const panel = (v3: V3Normalized, contextKey = "device|session") => (
     motionEnabled={false}
   />
 );
+
+/** Dezelfde frames als de owner-route, maar via de publieke sectorprojectie. */
+const sharedBoard = (source: V3Normalized, track = { name: "Spa", config: "Full Course" }): SharedRace => ({
+  ok: true,
+  created_at: "2026-11-21T18:00:00.000Z",
+  expires_at: "2026-11-21T20:00:00.000Z",
+  updated_at: new Date().toISOString(),
+  track,
+  session: { driver: "Jaimy", car: "GT3", state: "racing" },
+  v3: {
+    identity: source.identity,
+    transportSessionId: source.transportSessionId,
+    capturedAt: source.capturedAt,
+    session: source.session,
+    timing: source.timing,
+    opponents: source.opponents,
+  },
+  sectors: {
+    available: true,
+    reason: null,
+    sectorCount: 3,
+    cars: (source.paceHistory?.cars ?? []).map((car) => ({
+      id: car.id,
+      sectorCount: 3,
+      sectors: car.sectors as SharedSectorCar["sectors"],
+      sectorBests: car.sectorBests ?? [],
+      metrics: car.metrics,
+    })),
+  },
+  laps: [],
+  pace: null,
+});
 
 const rowOf = (container: HTMLElement, id: string) =>
   container.querySelector(`[data-timing-row-id="${id}"]`);
@@ -264,5 +298,24 @@ describe("sector continuity — identity, merge and live-slot edges", () => {
     );
     expect(classic.container.textContent).toContain("35.503");
     expect(value(view.container, "leroy", 0)).toBe("35.503");
+  });
+
+  it("keeps the shared projection stable through the same transient frame", () => {
+    const full = fullField(600);
+    const view = render(panel(sharedViewerV3(sharedBoard(full)), "share|a"));
+    expect(value(view.container, "leroy", 0)).toBe("35.503");
+
+    const partial = fullField(601);
+    partial.identity = {};
+    partial.paceHistory!.cars = [paceCar("player", 4, 600, [40.1, 40.2, 40.3])];
+    view.rerender(panel(sharedViewerV3(sharedBoard(partial)), "share|a"));
+    expect(value(view.container, "leroy", 0)).toBe("35.503");
+    expect(value(view.container, "f0820", 2)).toBe("38.500");
+
+    // A new share token is a different world: no values from the old share.
+    const sparse = fullField(602);
+    sparse.paceHistory!.cars = [paceCar("player", 4, 601, [40.1, 40.2, 40.3])];
+    view.rerender(panel(sharedViewerV3(sharedBoard(sparse)), "share|b"));
+    expect(value(view.container, "leroy", 0)).toBeNull();
   });
 });
