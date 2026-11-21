@@ -24,6 +24,7 @@ const connectorFixture = resolve(here, "./fixtures/pit-edges-connector.json");
 const rollback = resolve(here, "../rollbacks/20261121121000_personal_pit_visits.down.sql");
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
+const ADMIN = "33333333-3333-4333-8333-333333333333";
 const OTHER = "22222222-2222-4222-8222-222222222222";
 const DEVICE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const DEVICE_2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -65,7 +66,9 @@ await db.exec(`
     confidence double precision,
     UNIQUE (device_id, event_uid)
   );
-  CREATE FUNCTION public.can_manage_simhub() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
+  CREATE FUNCTION public.can_manage_simhub() RETURNS boolean LANGUAGE sql STABLE AS $$
+    SELECT coalesce(nullif(current_setting('test.manage', true), ''), '0')::boolean
+  $$;
   INSERT INTO public.simhub_devices VALUES ('${DEVICE}', '${OWNER}');
   INSERT INTO public.simhub_devices VALUES ('${DEVICE_2}', '${OWNER}');
 `);
@@ -216,6 +219,25 @@ try {
     "the reader exposes the measured gross duration and its source");
   check(feed.diagnostics.rejectedEdges >= 3 && typeof feed.diagnostics.lastRejectReason === "string",
     "rejected edges stay visible as an explicit diagnostic, not as a silent gap");
+
+  // Admin-pitwalltest: dezelfde lezer, dezelfde bron, maar een beheerder die
+  // niet de eigenaar is. Alleen de bestaande can_manage_simhub()-poort opent
+  // dit; de ownerroute en de grants blijven ongewijzigd.
+  await db.query("SELECT set_config('test.uid', $1, false)", [ADMIN]);
+  await db.query("SELECT set_config('test.manage', '1', false)");
+  const adminFeed = await read(ADMIN, DEVICE);
+  check(adminFeed.available === true && adminFeed.sessionKey === "sim-42-s2" && adminFeed.visits.length === 1,
+    "an admin with can_manage_simhub can read the same current-session visit of a non-owned device");
+  check(Number(adminFeed.visits[0].pitLaneSeconds) === 40 && adminFeed.visits[0].source === "measurement_event_pit_edges",
+    "the admin reader exposes the identical measured gross duration and source as the owner reader");
+  await db.query("SELECT set_config('test.manage', '0', false)");
+  let adminWithoutGrantDenied = false;
+  try {
+    await read(ADMIN, DEVICE);
+  } catch (error) {
+    adminWithoutGrantDenied = /Permission denied/.test(String(error.message));
+  }
+  check(adminWithoutGrantDenied, "without can_manage_simhub an admin uid has no access to another owner's device");
 
   await edge({ kind: "pit_in", visit: "pit-new-session", session: "sim-42-s3", time: 3000, wall: 3000 });
   feed = await read();

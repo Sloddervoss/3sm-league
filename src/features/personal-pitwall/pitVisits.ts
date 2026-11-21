@@ -33,6 +33,15 @@ export type PersonalPitFeed = {
 
 export const EMPTY_PIT_DIAGNOSTICS: PersonalPitDiagnostics = { pendingEdges: 0, rejectedEdges: 0, lastRejectReason: null };
 
+/** Eén foutvorm voor beide lezers; de panel-copy blijft de gebruikersmelding. */
+export function asPersonalPitRpcError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return new Error(error.message);
+  }
+  return new Error("Pitwall-verzoek mislukt");
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 

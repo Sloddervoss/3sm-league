@@ -22,6 +22,7 @@
     "test:db:pace-guard": "node supabase/tests/pace-history-identity-guard.test.mjs",
     "test:db:pace-persist-guard": "node supabase/tests/persist-pace-identity-guard.test.mjs",
     "test:db:pitwall-pit-visits": "node supabase/tests/personal-pit-visits.test.mjs",
+    "test:pitwall-parity": "vitest run src/test/pitwallPitDurationParity.test.tsx",
     "test:browser:pitwall-share": "node scripts/personal-pitwall-share-browser.mjs",
     "smoke:iracing-catalog": "bash scripts/ensure-playwright-runtime.sh node scripts/iracing-catalog-visual-smoke.mjs",
     "simhub:bridge": "node tools/simhub-bridge/server.mjs",

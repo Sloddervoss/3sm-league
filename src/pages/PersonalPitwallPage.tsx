@@ -639,7 +639,7 @@ export default function PersonalPitwallPage() {
                 gap={Boolean(detailQuery.error) || !tele}
                 lastSeen={relTime(detail.health?.received_at)}
                 tag="MIJN PITWALL"
-                pitDuration={<PitDurationPanel deviceId={deviceId} enabled={live} load={readPersonalPitVisits} />}
+                pitDuration={<PitDurationPanel deviceId={deviceId} enabled={live} load={readPersonalPitVisits} contextKey={contextKey} />}
               />
             </>
           )}

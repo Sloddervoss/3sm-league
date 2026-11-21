@@ -89,4 +89,77 @@ describe("personal pit visits", () => {
     expect(view.container.textContent).toBe("");
     expect(load).not.toHaveBeenCalled();
   });
+
+  it("clears the old stop immediately when the device changes, and ignores its late response", async () => {
+    let resolveA: ((value: typeof feed) => void) | undefined;
+    let resolveB: ((value: typeof feed) => void) | undefined;
+    const load = vi.fn((id: string) =>
+      new Promise<typeof feed>((resolve) => {
+        if (id === "device-a") resolveA = resolve;
+        else resolveB = resolve;
+      }),
+    );
+    const view = render(
+      <PitDurationPanel deviceId="device-a" enabled load={load} contextKey="device-a|sim-1" pollMs={60_000} />,
+    );
+    await waitFor(() => expect(load).toHaveBeenCalledWith("device-a"));
+
+    view.rerender(
+      <PitDurationPanel deviceId="device-b" enabled load={load} contextKey="device-b|sim-1" pollMs={60_000} />,
+    );
+    expect(screen.getByText("Pitduur laden…")).toBeTruthy();
+
+    resolveA?.(feed);
+    await Promise.resolve();
+    expect(screen.queryByText("38.125 s")).toBeNull();
+
+    resolveB?.({ ...feed, sessionKey: "sim-9-s1", visits: [{ ...feed.visits[0], pitLaneSeconds: 41.25 }] });
+    expect(await screen.findByText("41.250 s")).toBeTruthy();
+    expect(screen.queryByText("38.125 s")).toBeNull();
+  });
+
+  it("clears the old stop on a session change even when the device stays the same", async () => {
+    let resolveSecond: ((value: typeof feed) => void) | undefined;
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(feed)
+      .mockImplementationOnce(() => new Promise<typeof feed>((resolve) => { resolveSecond = resolve; }));
+    const view = render(
+      <PitDurationPanel deviceId="device-a" enabled load={load} contextKey="device-a|sim-1" pollMs={60_000} />,
+    );
+    expect(await screen.findByText("38.125 s")).toBeTruthy();
+
+    view.rerender(
+      <PitDurationPanel deviceId="device-a" enabled load={load} contextKey="device-a|sim-2" pollMs={60_000} />,
+    );
+    expect(screen.queryByText("38.125 s")).toBeNull();
+    expect(screen.getByText("Pitduur laden…")).toBeTruthy();
+
+    resolveSecond?.({
+      available: false,
+      reason: "no_completed_visit",
+      sessionKey: "sim-2",
+      visits: [],
+      diagnostics: EMPTY_PIT_DIAGNOSTICS,
+    });
+    await waitFor(() => expect(screen.getByText("Nog geen afgeronde pitstop in deze sessie.")).toBeTruthy());
+    expect(screen.queryByText("38.125 s")).toBeNull();
+  });
+
+  it("shows the explicit error without keeping a previous stop", async () => {
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(feed)
+      .mockRejectedValueOnce(new Error("rpc down"));
+    const view = render(
+      <PitDurationPanel deviceId="device-a" enabled load={load} contextKey="device-a|sim-1" pollMs={60_000} />,
+    );
+    expect(await screen.findByText("38.125 s")).toBeTruthy();
+
+    view.rerender(
+      <PitDurationPanel deviceId="device-a" enabled load={load} contextKey="device-a|sim-2" pollMs={60_000} />,
+    );
+    expect(await screen.findByText("Pitduur kon niet worden geladen.")).toBeTruthy();
+    expect(screen.queryByText("38.125 s")).toBeNull();
+  });
 });

@@ -12,9 +12,17 @@ import {
 interface Props {
   deviceId: string | null;
   enabled: boolean;
-  /** Injectable for tests; production uses the owner-scoped RPC. */
+  /** Injectable for tests; production uses the owner-scoped or admin reader. */
   load: (deviceId: string) => Promise<PersonalPitFeed>;
   pollMs?: number;
+  /**
+   * Identiteit van het device én de sessie die op dit moment op het scherm
+   * staat (device + last_session_id + session_id + race_run_id). Zonder deze
+   * grens zou een net gewisseld device één frame lang de stop van het vorige
+   * device kunnen tonen. Een oude, later binnenkomende query mag de nieuwe
+   * context nooit overschrijven.
+   */
+  contextKey?: string | null;
 }
 
 const EMPTY: PersonalPitFeed = {
@@ -25,6 +33,9 @@ const EMPTY: PersonalPitFeed = {
   diagnostics: EMPTY_PIT_DIAGNOSTICS,
 };
 
+type ScopedFeed = { context: string; feed: PersonalPitFeed };
+type ScopedError = { context: string; message: string };
+
 /**
  * Persoonlijke pitduur, van pit-in tot pit-uit.
  *
@@ -32,18 +43,26 @@ const EMPTY: PersonalPitFeed = {
  * herkomst. Zij voedt geen strategie-advies en noemt de waarde nooit "netto
  * verlies"; service zit in de bruto pitstraattijd. De strategie leest hem
  * alleen als aparte laatste-stop-benchmark.
+ *
+ * Dezelfde kaart en dezelfde copy worden gebruikt door Mijn Pitwall en de
+ * admin-pitwalltest. Alleen de lezer verschilt (owner vs. beheerder); de
+ * server-RPC bewaakt de autorisatie in beide gevallen.
  */
-export function PitDurationPanel({ deviceId, enabled, load, pollMs = 5_000 }: Props) {
-  const [feed, setFeed] = useState<PersonalPitFeed | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export function PitDurationPanel({ deviceId, enabled, load, pollMs = 5_000, contextKey = null }: Props) {
+  // De context staat naast de data, niet alleen in een ref. Daardoor kan een
+  // render met een nieuw device/de nieuwe sessie de oude feed niet één frame
+  // lang laten zien; de mismatch verbergt hem vóór de effect-cleanup loopt.
+  const scopedContext = `${enabled ? "1" : "0"}|${deviceId ?? ""}|${contextKey ?? ""}`;
+  const [scopedFeed, setScopedFeed] = useState<ScopedFeed | null>(null);
+  const [scopedError, setScopedError] = useState<ScopedError | null>(null);
   const generation = useRef(0);
 
   useEffect(() => {
     generation.current += 1;
     const mine = generation.current;
     if (!enabled || !deviceId) {
-      setFeed(null);
-      setError(null);
+      setScopedFeed(null);
+      setScopedError(null);
       return;
     }
     let alive = true;
@@ -51,13 +70,16 @@ export function PitDurationPanel({ deviceId, enabled, load, pollMs = 5_000 }: Pr
       try {
         const next = await load(deviceId);
         if (!alive || mine !== generation.current) return;
-        setFeed(next);
-        setError(null);
+        setScopedFeed({ context: scopedContext, feed: next });
+        setScopedError(null);
       } catch {
         if (!alive || mine !== generation.current) return;
-        // Een mislukte eigenaar-read mag de rest van de pitwall niet raken.
-        setFeed((previous) => previous ?? EMPTY);
-        setError("Pitduur kon niet worden geladen.");
+        // Een mislukte lees mag de rest van de pitwall niet raken en ook geen
+        // oude stop van een vorige sessie laten staan.
+        setScopedFeed((previous) =>
+          previous?.context === scopedContext ? previous : { context: scopedContext, feed: EMPTY },
+        );
+        setScopedError({ context: scopedContext, message: "Pitduur kon niet worden geladen." });
       }
     };
     void run();
@@ -66,8 +88,10 @@ export function PitDurationPanel({ deviceId, enabled, load, pollMs = 5_000 }: Pr
       alive = false;
       window.clearInterval(timer);
     };
-  }, [deviceId, enabled, load, pollMs]);
+  }, [deviceId, enabled, load, pollMs, scopedContext]);
 
+  const feed = scopedFeed?.context === scopedContext ? scopedFeed.feed : null;
+  const error = scopedError?.context === scopedContext ? scopedError.message : null;
   const visit = feed?.visits[0] ?? null;
   const meta = <span className="text-[10px] text-slate-500">pit-in → pit-out</span>;
   const diagnostics = feed?.diagnostics ?? EMPTY_PIT_DIAGNOSTICS;

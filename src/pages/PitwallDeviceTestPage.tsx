@@ -44,6 +44,8 @@ import { PremiumFocusBar } from "@/features/endurance/pitwall/test-premium/Premi
 import { usePitwallFocus } from "@/features/endurance/pitwall/test-premium/usePitwallFocus";
 import { usePitwallTestSettings } from "@/features/endurance/pitwall/test-premium/usePitwallTestSettings";
 import { resolveFuelLearning } from "@/features/endurance/pitwall/learning/fuelServing";
+import { PitDurationPanel } from "@/features/personal-pitwall/PitDurationPanel";
+import { readAdminPitVisits } from "@/features/personal-pitwall/adminPitVisits";
 
 const ONLINE_WINDOW_MS = 5 * 60_000;
 
@@ -645,6 +647,14 @@ export default function PitwallDeviceTestPage() {
                 contextKey={contextKey}
                 gap={dataGap}
                 lastSeen={lastSeen}
+                pitDuration={
+                  <PitDurationPanel
+                    deviceId={deviceId}
+                    enabled={live}
+                    load={readAdminPitVisits}
+                    contextKey={contextKey}
+                  />
+                }
               />
             )}
 

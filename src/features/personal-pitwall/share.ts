@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { SimHubDeviceDetail } from "@/features/control-room/connectors/types";
 import type { V3Normalized } from "@/features/endurance/pitwall/pitwallHelpers";
 import type { PaceCar, PaceHistory } from "../../../supabase/functions/_shared/paceCapture";
-import { parsePersonalPitVisits, type PersonalPitFeed } from "@/features/personal-pitwall/pitVisits";
+import { asPersonalPitRpcError, parsePersonalPitVisits, type PersonalPitFeed } from "@/features/personal-pitwall/pitVisits";
 import { takeCapturedShareToken } from "@/lib/shareTokenBootstrap";
 
 /**
@@ -125,13 +125,7 @@ export interface SharedSectorCar {
 
 export type SharedRaceResult = SharedRace | { ok: false; code: "invalid" | "ended" | "stale" | "waiting" | string };
 
-const asRpcError = (error: unknown): Error => {
-  if (error instanceof Error) return error;
-  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
-    return new Error(error.message);
-  }
-  return new Error("Pitwall-verzoek mislukt");
-};
+const asRpcError = asPersonalPitRpcError;
 
 export async function listMyPitwallDevices(): Promise<MyPitwallDevices> {
   const { data, error } = await ownerRpc("pitwall_my_devices_v2");
