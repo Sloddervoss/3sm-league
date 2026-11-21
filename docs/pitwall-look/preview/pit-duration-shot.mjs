@@ -32,11 +32,14 @@ try {
       seconds: node?.getAttribute("data-pit-duration"),
       text: document.querySelector("[data-pit-visit]")?.textContent?.replace(/\s+/g, " ").trim(),
       source: document.querySelector("[data-pit-visit]")?.getAttribute("data-pit-source"),
+      benchmark: document.querySelector("[data-pit-visit]")?.getAttribute("data-pit-benchmark"),
     };
   });
   assert.equal(card.seconds, "38.125");
-  assert.equal(card.source, "tyre_observation_pit_edges");
+  assert.equal(card.source, "measurement_event_pit_edges");
   assert.match(card.text ?? "", /38\.125 s/);
+  assert.equal(card.benchmark, "gross");
+  assert.match(card.text ?? "", /Laatste gemeten stop · bruto benchmark · niet in het strategiemodel\./);
   assert.match(card.text ?? "", /Bruto pitstraattijd, service inbegrepen\. Geen netto raceverlies\./);
   assert.deepEqual(errors, []);
 

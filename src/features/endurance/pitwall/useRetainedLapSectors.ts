@@ -37,6 +37,13 @@ type State = {
   clock: number | null;
   count: number;
   laps: Map<string, RetainedLapSectors>;
+  /**
+   * Bevestigde ongeldigheden per auto en ronde. Deze blijven binnen de sessie
+   * staan, ook als een later frame de invalidated-sector niet meer meezendt.
+   * Zonder dit kan een oudere meting de ongeldige ronde weer tot "bewezen"
+   * maken.
+   */
+  invalidated: Map<string, Set<string>>;
   stale: boolean;
 };
 
@@ -49,6 +56,7 @@ const empty = (input: State["input"], context: string): State => ({
   clock: null,
   count: 0,
   laps: new Map(),
+  invalidated: new Map(),
   stale: true,
 });
 
@@ -184,6 +192,7 @@ function update(previous: State | null, input: State["input"], context: string, 
   }
 
   const laps = new Map<string, RetainedLapSectors>(reset ? undefined : [...(previous?.laps ?? [])]);
+  const invalidated = new Map<string, Set<string>>(reset ? undefined : [...(previous?.invalidated ?? [])]);
 
   const opponents = (input.opponents ?? []).slice(0, 40);
   const live = buildSectorTimingIndex(history, opponents.map(o => ({ id: o.id, currentLap: o.lap })));
@@ -194,20 +203,45 @@ function update(previous: State | null, input: State["input"], context: string, 
     const metrics = persistedMetrics(input, o.id);
     const historyCar = history?.cars.find(car => car.id === o.id);
 
-    // Expliciete ongeldigheid wist alleen de reeks waar zij over gaat. Een
-    // reset of tow van de *lopende* ronde maakt de vorige bewezen ronde niet
-    // onwaar; die blijft als "laatst geverifieerd" staan.
-    const invalidatedLaps = new Set<number>();
+    // Bevestigde ongeldigheden worden in deze sessie onthouden. Een later
+    // frame dat de invalidated-sector niet meer bevat, maakt de ronde niet
+    // opnieuw geldig.
+    const seenInvalidated = new Set<string>(invalidated.get(o.id) ?? []);
     for (const sector of historyCar?.sectors ?? []) {
-      if (sector && sector.status === "invalidated" && Number.isInteger(sector.lap)) invalidatedLaps.add(sector.lap);
+      if (sector && sector.status === "invalidated" && Number.isInteger(sector.lap)) {
+        seenInvalidated.add(`${sector.lap}:${sector.sectorIndex}`);
+        invalidated.set(o.id, seenInvalidated);
+      }
     }
-    const invalidatedCachedLap = cached?.lap != null && invalidatedLaps.has(cached.lap);
+    const invalidatedCells = seenInvalidated;
+    const invalidatedCachedLap = cached?.lap != null
+      && [...invalidatedCells].some((key) => key.startsWith(`${cached.lap}:`));
     const cachedLapMarkedInvalid = cached?.lap != null && metrics?.lapValid === false && metrics.sectorLap === cached.lap;
     const cachedLapIsShortArtifact = cached?.lap != null && completed != null && completed === cached.lap &&
       o.lastLapSeconds != null && geldigeLaatsteRonde(o.lastLapSeconds, o.bestLapSeconds) == null;
-    const lapCounterWentBack = cached?.lap != null && completed != null && completed < cached.lap;
+    // Een lagere ronde is alleen een tellerreset als de meting niet
+    // aantoonbaar ouder is. Een out-of-order poll mag de nieuwere reeks niet
+    // wissen.
+    const lapCounterWentBack = cached?.lap != null && completed != null && completed < cached.lap
+      && (metrics?.observedSessionTimeSeconds == null || cached.observedSessionTime == null
+        || metrics.observedSessionTimeSeconds >= cached.observedSessionTime);
 
     if (invalidatedCachedLap || cachedLapMarkedInvalid || cachedLapIsShortArtifact || lapCounterWentBack) {
+      // Tijdelijke diagnose: waarom verdween deze cel? Alleen een gehashte
+      // auto-referentie en een vaste reden, nooit een naam of ruwe data.
+      traceSector("retained_lap_dropped", {
+        scope: context,
+        car: carRef(o.id),
+        lap: cached?.lap ?? null,
+        detail: {
+          reason: invalidatedCachedLap ? "invalidated"
+            : cachedLapMarkedInvalid ? "lap_marked_invalid"
+              : cachedLapIsShortArtifact ? "short_artifact"
+                : "lap_counter_back",
+          retained: cached?.seconds.length ?? 0,
+          observed_count: observedCount,
+        },
+      });
       laps.delete(o.id);
       continue;
     }
@@ -217,7 +251,7 @@ function update(previous: State | null, input: State["input"], context: string, 
     const timing = live.get(o.id);
     const liveSectors = liveLap(timing);
     if (timing && !liveSectors) {
-      traceSector("live_partial_ignored", {
+      traceSector("live_partial_composed", {
         scope: context,
         car: carRef(o.id),
         lap: timing.lap,
@@ -229,7 +263,9 @@ function update(previous: State | null, input: State["input"], context: string, 
         },
       });
     }
-    if (liveSectors && newerThan({ lap: liveSectors.lap, observedSessionTime: clock }, cached)) {
+    const liveLapInvalidated = liveSectors != null
+      && [...invalidatedCells].some((key) => key.startsWith(`${liveSectors.lap}:`));
+    if (liveSectors && !liveLapInvalidated && newerThan({ lap: liveSectors.lap, observedSessionTime: clock }, cached)) {
       laps.set(o.id, { seconds: liveSectors.seconds, lap: liveSectors.lap, observedSessionTime: clock, observedAtMs: nowMs });
       continue;
     }
@@ -238,7 +274,7 @@ function update(previous: State | null, input: State["input"], context: string, 
     if (!completedLapResult) continue;
     // Een expliciet ongeldig verklaarde ronde komt niet terug via een oudere
     // meting die dezelfde ronde nog als geldig in zijn slot heeft.
-    if (invalidatedLaps.has(completedLapResult.lap)) continue;
+    if ([...invalidatedCells].some((key) => key.startsWith(`${completedLapResult.lap}:`))) continue;
     const observed = metrics?.observedSessionTimeSeconds ?? clock ?? null;
     if (newerThan({ lap: completedLapResult.lap, observedSessionTime: observed }, cached)) {
       laps.set(o.id, {
@@ -269,6 +305,7 @@ function update(previous: State | null, input: State["input"], context: string, 
     clock,
     count,
     laps,
+    invalidated,
     stale: !history || opponents.every(o => rowSectors(input, o.id, o.lastLapSeconds) == null && !persistedMetrics(input, o.id)),
   };
 }

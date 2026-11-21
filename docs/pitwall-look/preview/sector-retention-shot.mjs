@@ -149,15 +149,16 @@ try {
   evidence.push({ step: p5.label, poll: p5.poll, data: p5 });
   await page.screenshot({ path: path.join(OUT, "poll-6-restored.png"), fullPage: true });
 
-  // Only S1 of R4 is present. The complete R3 must remain visible as a whole.
+  // Only S1 of R4 is present. The verified S1 appears immediately; S2/S3 stay
+  // on R3 with their own explicit R label.
   await settle(6);
   const p6 = await readPremium();
   assert.equal(p6.poll, "6");
-  assert.deepEqual(p6.premium.f0820.map((c) => c.value), ["36.500", "37.500", "38.500"]);
-  assert.deepEqual(p6.premium.f0820.map((c) => c.lap), ["3", "3", "3"]);
-  assert.deepEqual(p6.premium.f0820.map((c) => c.source), ["verified-lap", "verified-lap", "verified-lap"]);
+  assert.deepEqual(p6.premium.f0820.map((c) => c.value), ["36.200", "37.500", "38.500"]);
+  assert.deepEqual(p6.premium.f0820.map((c) => c.lap), ["4", "3", "3"]);
+  assert.deepEqual(p6.premium.f0820.map((c) => c.source), ["live", "verified-lap", "verified-lap"]);
   const partialTrace = await page.evaluate(() => window.__pitwallSectorTrace?.dump() ?? []);
-  assert.equal(partialTrace.some((event) => event.code === "live_partial_ignored" && event.detail?.slots === 1), true);
+  assert.equal(partialTrace.some((event) => event.code === "live_partial_composed" && event.detail?.slots === 1), true);
   evidence.push({ step: p6.label, poll: p6.poll, data: p6, traceCodes: partialTrace.map((event) => event.code) });
   await page.screenshot({ path: path.join(OUT, "poll-7-partial-live.png"), fullPage: true });
 
@@ -171,6 +172,36 @@ try {
   evidence.push({ step: p7.label, poll: p7.poll, data: p7 });
   await page.screenshot({ path: path.join(OUT, "poll-8-complete-live.png"), fullPage: true });
 
+  // Deterministic out-of-order: an older PACE row arrives after the newer one.
+  // The newer R4 must not regress to R3.
+  await settle(8);
+  const p8 = await readPremium();
+  assert.equal(p8.poll, "8");
+  assert.deepEqual(p8.premium.f0820.map((c) => c.value), ["36.200", "37.200", "38.200"]);
+  assert.deepEqual(p8.premium.f0820.map((c) => c.lap), ["4", "4", "4"]);
+  evidence.push({ step: p8.label, poll: p8.poll, data: p8 });
+  await page.screenshot({ path: path.join(OUT, "poll-9-out-of-order.png"), fullPage: true });
+
+  // Confirmed invalidation: the cells disappear for an explicit reason, and
+  // the temporary trace names that reason (car id is only a hash).
+  await settle(9);
+  const p9 = await readPremium();
+  assert.equal(p9.poll, "9");
+  assert.deepEqual(p9.premium.f0820.map((c) => c.value), [null, null, null]);
+  const dropTrace = await page.evaluate(() => window.__pitwallSectorTrace?.dump() ?? []);
+  assert.equal(dropTrace.some((event) => event.code === "retained_lap_dropped" && event.detail?.reason === "invalidated" && event.lap === 4), true);
+  assert.equal(dropTrace.every((event) => /^[0-9a-f]{8}$/.test(event.car ?? "")), true);
+  evidence.push({ step: p9.label, poll: p9.poll, data: p9, traceCodes: dropTrace.map((event) => event.code) });
+  await page.screenshot({ path: path.join(OUT, "poll-10-invalidated.png"), fullPage: true });
+
+  // A later older valid copy of the same lap cannot resurrect the cells.
+  await settle(10);
+  const p10 = await readPremium();
+  assert.equal(p10.poll, "10");
+  assert.deepEqual(p10.premium.f0820.map((c) => c.value), [null, null, null]);
+  evidence.push({ step: p10.label, poll: p10.poll, data: p10 });
+  await page.screenshot({ path: path.join(OUT, "poll-11-late-old-invalid.png"), fullPage: true });
+
   assert.deepEqual(errors, []);
   await writeFile(path.join(OUT, "evidence.json"), JSON.stringify({ ok: true, evidence, errors }, null, 2));
   console.log(JSON.stringify({
@@ -178,6 +209,7 @@ try {
     screenshots: [
       "poll-1-seq718.png", "poll-2-seq720.png", "poll-3-seq722.png", "poll-4-13cars.png",
       "poll-5-transient-identity.png", "poll-6-restored.png", "poll-7-partial-live.png", "poll-8-complete-live.png",
+      "poll-9-out-of-order.png", "poll-10-invalidated.png", "poll-11-late-old-invalid.png",
     ],
     polls: evidence.map((entry) => ({
       poll: entry.poll,

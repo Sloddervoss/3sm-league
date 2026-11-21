@@ -21,6 +21,8 @@ export interface SnapshotInput {
   plannedDurationMinutes?: number | null;
   /** Gemeten pitverlies-basis; null zolang er geen stop is waargenomen. */
   pitLaneSeconds?: number | null;
+  /** Bewezen servicevrije pitlanebasis; nooit de bruto servermediaan. */
+  serviceFreePitLaneSeconds?: number | null;
   secondsPerLitre?: number | null;
   tyreSeconds?: number | null;
   reserveLaps?: number;
@@ -102,6 +104,7 @@ export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
     sampleAgeSeconds:
       laatsteMeting == null ? Number.POSITIVE_INFINITY : Math.max(0, (nowMs - laatsteMeting) / 1000),
     pitLaneSeconds: input.pitLaneSeconds ?? null,
+    serviceFreePitLaneSeconds: input.serviceFreePitLaneSeconds ?? null,
     secondsPerLitre: input.secondsPerLitre ?? null,
     tyreSeconds: input.tyreSeconds ?? null,
     reserveLaps: input.reserveLaps,

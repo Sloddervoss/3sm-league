@@ -207,6 +207,46 @@ const POLLS: Array<{ label: string; frame: V3Normalized }> = [
       car("f0820", 4, 612, [36.2, 37.2, 38.2], [0, 1, 2].map((index) => liveUpdate("f0820", 4, index, 36.2 + index))),
     ], FIELD),
   },
+  {
+    // Deterministisch out-of-order: een ouder PACE-antwoord komt na seq 722
+    // binnen met dezelfde sessieklok. De nieuwere R4 mag niet terugvallen.
+    label: "out-of-order poll · oudere PACE-rij na nieuwere",
+    frame: frame(614, [
+      car("player", 4, 613, [40.1, 40.2, 40.3]),
+      car("leroy", 4, 613, [35.503, 52.35, 33.853]),
+      car("bart", 1, 533, [38.1, 40.2, 43.1]),
+      car("albert", 2, 573, [39.1, 41.2, 44.1]),
+      car("f0820", 3, 610, [36.5, 37.5, 38.5], [liveUpdate("f0820", 3, 0, 36.5)]),
+    ], FIELD),
+  },
+  {
+    // Bevestigde ongeldigheid van R4: de R4-cellen mogen niet uit de oude
+    // bewaarde ronde worden gevuld. De trace noemt de reden.
+    label: "bevestigde ongeldigheid · R4 afgekeurd",
+    frame: frame(616, [
+      car("player", 4, 615, [40.1, 40.2, 40.3]),
+      car("leroy", 4, 615, [35.503, 52.35, 33.853]),
+      car("bart", 1, 535, [38.1, 40.2, 43.1]),
+      car("albert", 2, 575, [39.1, 41.2, 44.1]),
+      car("f0820", 4, 616, [36.2, 37.2, 38.2], [0, 1, 2].map((index) => ({
+        ...liveUpdate("f0820", 4, index, 36.2 + index),
+        status: "invalidated" as const,
+        seconds: null,
+      }))),
+    ], FIELD),
+  },
+  {
+    // Een latere oudere kopie van R4 mag de bevestigde ongeldigheid niet
+    // opnieuw geldig maken.
+    label: "late oudere R4 · ongeldigheid blijft",
+    frame: frame(618, [
+      car("player", 4, 617, [40.1, 40.2, 40.3]),
+      car("leroy", 4, 617, [35.503, 52.35, 33.853]),
+      car("bart", 1, 537, [38.1, 40.2, 43.1]),
+      car("albert", 2, 577, [39.1, 41.2, 44.1]),
+      car("f0820", 4, 618, [36.2, 37.2, 38.2], [0, 1, 2].map((index) => liveUpdate("f0820", 4, index, 36.2 + index))),
+    ], FIELD),
+  },
 ];
 
 declare global {

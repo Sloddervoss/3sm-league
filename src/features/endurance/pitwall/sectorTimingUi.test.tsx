@@ -202,7 +202,7 @@ describe("live sector updates — premium consumer", () => {
     expect(view.container.querySelectorAll("colgroup col")).toHaveLength(12);
   });
 
-  it("houdt de bewezen ronde heel tot de volgende ronde compleet is", () => {
+  it("toont een nieuwe S1 direct en houdt de oudere S2/S3 met eigen R", () => {
     const first = frame([car("a", [
       update({ sectorIndex: 0, lap: 9, seconds: 30 }),
       update({ sectorIndex: 1, lap: 9, seconds: 30.5 }),
@@ -230,14 +230,18 @@ describe("live sector updates — premium consumer", () => {
       />,
     );
 
-    for (const index of [0, 1, 2]) {
+    // The new S1 is not delayed for a complete row; the older cells stay
+    // explicitly on R9 instead of disappearing or being mislabelled.
+    expect(within(premiumCell(view.container, "a", 0)).getByText("29.900")).toBeTruthy();
+    expect(premiumCell(view.container, "a", 0).querySelector("[data-sector-lap='10']")).not.toBeNull();
+    expect(within(premiumCell(view.container, "a", 1)).getByText("30.500")).toBeTruthy();
+    expect(within(premiumCell(view.container, "a", 2)).getByText("31.000")).toBeTruthy();
+    for (const index of [1, 2]) {
       const held = premiumCell(view.container, "a", index);
       expect(held.querySelector("[data-sector-lap='9']")).not.toBeNull();
       expect(held.querySelector("[data-sector-previous='true']")).not.toBeNull();
     }
-    expect(within(premiumCell(view.container, "a", 0)).getByText("30.000")).toBeTruthy();
-    expect(within(premiumCell(view.container, "a", 1)).getByText("30.500")).toBeTruthy();
-    expect(within(premiumCell(view.container, "a", 2)).getByText("31.000")).toBeTruthy();
+    expect(view.container.querySelector('[data-timing-row-id="a"]')?.getAttribute("data-sector-mixed-laps")).toBe("true");
 
     // All three sectors of R10 now carry the same lap: replace the whole row.
     const complete = frame([car("a", [
@@ -431,6 +435,6 @@ describe("live sector updates — klassieke consumenten", () => {
     expect(cell.querySelector("[data-sector-status]")).toBeNull();
     expect(cell.querySelector("[data-sector-value]")?.textContent).toBe("30.000");
     expect(cell.querySelector("[data-sector-lap-mark='10']")).not.toBeNull();
-    expect(cell.getAttribute("title")).toContain("Gecontroleerde laatste ronde");
+    expect(cell.getAttribute("title")).toContain("Laatst geverifieerd");
   });
 });

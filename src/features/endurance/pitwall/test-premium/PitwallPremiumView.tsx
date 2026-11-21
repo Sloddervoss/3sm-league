@@ -152,6 +152,14 @@ export function PitwallPremiumView({
           "geen advies"-beslissing. De band komt uit dezelfde live staat. */}
       <DecisionBand advice={{ ...strategyAdvice, tyreEstimate: live ? tyreEstimate : null }} />
 
+      {/* De gemeten pitduur is een aparte, bruto laatste-stop-benchmark. Hij
+          wordt nooit bij het model opgeteld en vervangt de modeltransit niet. */}
+      {!readOnly && pitDuration && (
+        <div className="ptp-pit-benchmark" data-pit-strategy-benchmark="gross">
+          {pitDuration}
+        </div>
+      )}
+
       <div className="ptp-main" data-pitwall-row="track-timing">
         <div className="ptp-track-col" data-pitwall-col="track">
           <PremiumCircuitPanel v3={v3} live={live} fallbackTrack={trackLabel || detail.device.device_name} />
@@ -165,7 +173,6 @@ export function PitwallPremiumView({
             bestLapSeconds={live ? v3?.timing?.bestLapTimeSeconds ?? null : null}
             gapToLeaderSeconds={live ? v3?.position?.gapToLeaderSeconds ?? null : null}
           />
-          {!readOnly && pitDuration}
         </div>
 
         <div className="ptp-timing-col" data-pitwall-col="timing">

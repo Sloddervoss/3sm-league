@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Timer } from "lucide-react";
 import { PitwallPanel } from "@/features/endurance/pitwall/PitwallPanel";
 import {
+  EMPTY_PIT_DIAGNOSTICS,
+  PIT_BENCHMARK_SEMANTICS,
   PIT_DURATION_SEMANTICS,
   formatPitDuration,
   type PersonalPitFeed,
@@ -15,14 +17,21 @@ interface Props {
   pollMs?: number;
 }
 
-const EMPTY: PersonalPitFeed = { available: false, reason: "no_completed_visit", sessionKey: null, visits: [] };
+const EMPTY: PersonalPitFeed = {
+  available: false,
+  reason: "no_completed_visit",
+  sessionKey: null,
+  visits: [],
+  diagnostics: EMPTY_PIT_DIAGNOSTICS,
+};
 
 /**
  * Persoonlijke pitduur, van pit-in tot pit-uit.
  *
- * De kaart is met opzet smal gehouden: één gemeten getal, de ronde en de
- * herkomst. Zij voedt geen strategie-advies en noemt de waarde nooit
- * "netto verlies"; service zit in de bruto pitstraattijd.
+ * De kaart is met opzet smal gehouden: één gemeten getal, de bronflanken en de
+ * herkomst. Zij voedt geen strategie-advies en noemt de waarde nooit "netto
+ * verlies"; service zit in de bruto pitstraattijd. De strategie leest hem
+ * alleen als aparte laatste-stop-benchmark.
  */
 export function PitDurationPanel({ deviceId, enabled, load, pollMs = 5_000 }: Props) {
   const [feed, setFeed] = useState<PersonalPitFeed | null>(null);
@@ -61,32 +70,46 @@ export function PitDurationPanel({ deviceId, enabled, load, pollMs = 5_000 }: Pr
 
   const visit = feed?.visits[0] ?? null;
   const meta = <span className="text-[10px] text-slate-500">pit-in → pit-out</span>;
+  const diagnostics = feed?.diagnostics ?? EMPTY_PIT_DIAGNOSTICS;
 
   if (!enabled || !deviceId) return null;
 
   return (
-    <PitwallPanel title="Pitduur" slot="pitduration" meta={meta}>
+    <PitwallPanel title="Laatste stop" slot="pitduration" meta={meta}>
       {error ? <p className="text-[11px] text-amber-300">{error}</p> : null}
       {!feed && !error ? (
         <p className="text-[11px] text-slate-500">Pitduur laden…</p>
       ) : visit ? (
-        <div data-pit-visit={visit.visitKey} data-pit-source={visit.source}>
+        <div data-pit-visit={visit.visitKey} data-pit-source={visit.source} data-pit-benchmark="gross">
           <p className="flex items-baseline gap-1.5 font-mono text-[18px] font-bold text-slate-100" data-pit-duration={visit.pitLaneSeconds}>
             <Timer aria-hidden size={13} className="text-slate-500" />
             {formatPitDuration(visit.pitLaneSeconds)}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-400">
-            {visit.exitLap != null ? `Ronde ${visit.exitLap}` : "Afgeronde stop"}
+          <p className="mt-0.5 text-[11px] text-slate-400" data-pit-benchmark-label="true">
+            {PIT_BENCHMARK_SEMANTICS}
             {feed && feed.visits.length > 1 ? ` · ${feed.visits.length} stops in deze sessie` : ""}
           </p>
           <p className="mt-1 text-[10px] leading-snug text-slate-400">{PIT_DURATION_SEMANTICS}</p>
         </div>
       ) : (
-        <p className="text-[11px] text-slate-500">
-          {feed?.reason === "no_session"
-            ? "Nog geen sessie op dit apparaat."
-            : "Nog geen afgeronde pitstop in deze sessie."}
-        </p>
+        <div data-pit-benchmark-empty="true">
+          <p className="text-[11px] text-slate-500">
+            {feed?.reason === "no_session"
+              ? "Nog geen sessie op dit apparaat."
+              : "Nog geen afgeronde pitstop in deze sessie."}
+          </p>
+          {diagnostics.pendingEdges > 0 && (
+            <p className="mt-1 text-[10px] text-amber-300" data-pit-pending-edges={diagnostics.pendingEdges}>
+              {diagnostics.pendingEdges} bronflank(en) wachten nog op hun paar.
+            </p>
+          )}
+          {diagnostics.rejectedEdges > 0 && (
+            <p className="mt-1 text-[10px] text-slate-400" data-pit-rejected-edges={diagnostics.rejectedEdges}>
+              {diagnostics.rejectedEdges} flank(en) afgekeurd
+              {diagnostics.lastRejectReason ? ` · ${diagnostics.lastRejectReason}` : ""}
+            </p>
+          )}
+        </div>
       )}
     </PitwallPanel>
   );

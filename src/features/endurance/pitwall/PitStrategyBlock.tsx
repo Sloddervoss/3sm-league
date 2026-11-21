@@ -93,13 +93,15 @@ export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss
         </div>
       )}
 
-      {/* Punt 9: gemeten tijd in de pitstraat. Geen meting = geen getal. */}
+      {/* Punt 9: gemeten tijd in de pitstraat. Geen meting = geen getal.
+          Dit is BLOOT: service zit erin. Daarom staat de mediaan apart van het
+          model en is de laatste stop een eigen benchmark, geen netto verlies. */}
       <div className="mb-2 flex items-baseline justify-between gap-2 text-[11px]">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Pitstraat</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Pitstraat · mediaan (bruto)</span>
         {pitLoss?.pitLaneSeconds != null ? (
           <span
             className="font-bold text-white"
-            title={`Mediaan van ${pitLoss.sampleCount} gemeten ${pitLoss.sampleCount === 1 ? "stop" : "stops"}`}
+            title={`Mediaan van ${pitLoss.sampleCount} gemeten ${pitLoss.sampleCount === 1 ? "stop" : "stops"} · service inbegrepen · aparte benchmark, niet het strategiemodel`}
           >
             {pitLoss.pitLaneSeconds.toFixed(1)} s
             <span className="ml-1 font-normal text-gray-500">
@@ -110,6 +112,19 @@ export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss
           <span className="text-gray-500">nog niet gemeten</span>
         )}
       </div>
+
+      {pitLoss?.lastStop?.seconds != null && (
+        <div
+          className="mb-2 flex items-baseline justify-between gap-2 text-[11px]"
+          data-pit-gross-benchmark="last-stop"
+          data-pit-gross-seconds={pitLoss.lastStop.seconds}
+        >
+          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Laatste stop (bruto)</span>
+          <span className="font-bold text-sky-200" title="Bruto pit-in tot pit-uit, service inbegrepen. Niet opgeteld bij het model en geen netto raceverlies.">
+            {pitLoss.lastStop.seconds.toFixed(1)} s
+          </span>
+        </div>
+      )}
 
       {/* STATUS */}
       <div className="flex items-center gap-1.5 text-[11px] pt-2 border-t border-white/5">

@@ -200,24 +200,27 @@ describe("sector continuity — identity, merge and live-slot edges", () => {
     expect(value(view.container, "leroy", 0)).toBe("35.503");
   });
 
-  it("does not let an incomplete live sector row hide a verified complete lap", () => {
+  it("shows a verified new S1 immediately and keeps older S2/S3 with their own R", () => {
     const base = fullField(600);
     const view = render(panel(base));
     expect(value(view.container, "f0820", 0)).toBe("36.500");
     expect(value(view.container, "f0820", 1)).toBe("37.500");
     expect(value(view.container, "f0820", 2)).toBe("38.500");
 
-    // S1 of the next lap arrived, S2/S3 did not. The old complete lap must stay
-    // visible as a whole; no half-old/half-new row and no dashes.
+    // S1 of the next lap arrived, S2/S3 did not. The verified new S1 is not
+    // delayed; S2/S3 stay with their own explicit R3 label.
     const partial = fullField(601);
     const f0820 = partial.paceHistory!.cars.find((car) => car.id === "f0820")!;
     f0820.sectors = [liveUpdate("f0820", 4, 0, 36.2)];
     f0820.metrics = metric("f0820", 3, 601, [36.5, 37.5, 38.5]) as PaceCar["metrics"];
     view.rerender(panel(partial));
-    expect(value(view.container, "f0820", 0)).toBe("36.500");
+    expect(value(view.container, "f0820", 0)).toBe("36.200");
     expect(value(view.container, "f0820", 1)).toBe("37.500");
     expect(value(view.container, "f0820", 2)).toBe("38.500");
-    expect(cellOf(view.container, "f0820", 0)?.querySelector('[data-sector-source="verified-lap"]')).not.toBeNull();
+    expect(cellOf(view.container, "f0820", 0)?.querySelector("[data-sector-status='verified']")).not.toBeNull();
+    expect(cellOf(view.container, "f0820", 1)?.querySelector('[data-sector-lap-mark="3"]')).not.toBeNull();
+    expect(cellOf(view.container, "f0820", 1)?.querySelector("[data-sector-previous='true']")).not.toBeNull();
+    expect(view.container.querySelector('[data-timing-row-id="f0820"]')?.getAttribute("data-sector-mixed-laps")).toBe("true");
 
     // Once the live row is complete, all three new values replace the cached lap.
     const complete = fullField(602);
@@ -231,7 +234,7 @@ describe("sector continuity — identity, merge and live-slot edges", () => {
     expect(cellOf(view.container, "f0820", 0)?.querySelector("[data-sector-status]")).not.toBeNull();
   });
 
-  it("falls back from a mixed-lap live row instead of combining two laps", () => {
+  it("composes a mixed-lap live row per sector with explicit R labels", () => {
     const base = fullField(600);
     const view = render(panel(base));
 
@@ -244,10 +247,42 @@ describe("sector continuity — identity, merge and live-slot edges", () => {
       { ...liveUpdate("f0820", 3, 2, 38.5), revision: 2 },
     ];
     view.rerender(panel(mixed));
-    expect(value(view.container, "f0820", 0)).toBe("36.500");
+    expect(value(view.container, "f0820", 0)).toBe("36.200");
     expect(value(view.container, "f0820", 1)).toBe("37.500");
     expect(value(view.container, "f0820", 2)).toBe("38.500");
-    expect(cellOf(view.container, "f0820", 0)?.textContent).toContain("R3");
+    expect(cellOf(view.container, "f0820", 0)?.textContent).toContain("R4");
+    expect(cellOf(view.container, "f0820", 1)?.textContent).toContain("R3");
+    expect(view.container.querySelector('[data-timing-row-id="f0820"]')?.getAttribute("data-sector-mixed-laps")).toBe("true");
+  });
+
+  it("never resurrects a lap after a confirmed invalidation", () => {
+    const base = fullField(600);
+    const f0820 = base.paceHistory!.cars.find((car) => car.id === "f0820")!;
+    f0820.sectors = [0, 1, 2].map((index) => liveUpdate("f0820", 3, index, 36.5 + index));
+    f0820.metrics = metric("f0820", 3, 600, [36.5, 37.5, 38.5]) as PaceCar["metrics"];
+    const view = render(panel(base));
+    expect(value(view.container, "f0820", 0)).toBe("36.500");
+
+    // Confirmed invalidation of exactly that lap: the cached row must go.
+    const invalid = fullField(601);
+    const invalidCar = invalid.paceHistory!.cars.find((car) => car.id === "f0820")!;
+    invalidCar.sectors = [
+      { ...liveUpdate("f0820", 3, 0, 36.5), status: "invalidated", seconds: null, revision: 2 },
+    ];
+    invalidCar.metrics = metric("f0820", 3, 601, [36.5, 37.5, 38.5]) as PaceCar["metrics"];
+    view.rerender(panel(invalid));
+    expect(value(view.container, "f0820", 0)).toBeNull();
+    expect(cellOf(view.container, "f0820", 0)?.querySelector("[data-sector-status='invalidated']")).not.toBeNull();
+
+    // A later older/legacy frame still carries the same lap. It must not
+    // resurrect the value; the invalidation is remembered for this session.
+    const older = fullField(602);
+    const olderCar = older.paceHistory!.cars.find((car) => car.id === "f0820")!;
+    olderCar.sectors = [];
+    olderCar.metrics = metric("f0820", 3, 602, [36.5, 37.5, 38.5]) as PaceCar["metrics"];
+    view.rerender(panel(older));
+    expect(value(view.container, "f0820", 0)).toBeNull();
+    expect(view.container.textContent).not.toContain("36.500");
   });
 
   it("still clears on a confirmed track change and a share/device context switch", () => {

@@ -114,12 +114,14 @@ export function derivePitStopMeasurement(samples: readonly PitFlagSample[]): Pit
     .map((stop) => stop.exitAt)
     .filter((exitAt): exitAt is string => typeof exitAt === "string")
     .sort();
+  const lastStop = [...stops].reverse().find((stop) => stop.exitAt != null && isPlausiblePitLaneSeconds(stop.seconds)) ?? null;
 
   return {
     pitLaneSeconds,
     sampleCount: bruikbaar.length,
     source: pitLaneSeconds == null ? "none" : "measured",
     lastStopAt: exits.length > 0 ? exits[exits.length - 1] : null,
+    lastStop,
     stops,
   };
 }
@@ -151,9 +153,12 @@ export function resolvePitStopMeasurement(
   payload: PitwallPitLossPayload | null | undefined,
 ): PitStopMeasurement {
   const server = serverMeasurement(payload);
-  if (server?.pitLaneSeconds != null) return server;
-
   const uitTijdlijn = derivePitStopMeasurement(timelineSamples(payload));
+  if (server?.pitLaneSeconds != null) {
+    // De mediaan komt van de server, maar de nieuwste afgeronde stop kan uit
+    // dezelfde tijdlijn worden gelezen. Die staat apart als bruto benchmark.
+    return { ...server, lastStop: server.lastStop ?? uitTijdlijn.lastStop, stops: server.stops.length > 0 ? server.stops : uitTijdlijn.stops };
+  }
   if (uitTijdlijn.pitLaneSeconds != null) return uitTijdlijn;
 
   return server ?? uitTijdlijn;
@@ -174,6 +179,7 @@ function serverMeasurement(payload: PitwallPitLossPayload | null | undefined): P
     sampleCount: sampleCount == null ? 0 : Math.trunc(sampleCount),
     source: pitLaneSeconds == null ? "none" : "measured",
     lastStopAt,
+    lastStop: null,
     stops: [],
   };
 }

@@ -67,12 +67,19 @@ export interface MeasuredPitStop {
  * het veld op null; de UI hoort dan "nog niet gemeten" te zeggen.
  */
 export interface PitStopMeasurement {
+  /**
+   * Mediaan van de bruikbare, BLOOT gemeten pitstraattijden (service
+   * inbegrepen). Dit is geen servicevrije basis en mag niet in
+   * `computePitLoss` terechtkomen.
+   */
   pitLaneSeconds: number | null;
   /** Aantal stops dat in de mediaan meewoog. */
   sampleCount: number;
   source: "measured" | "none";
   /** Moment van de laatst gemeten pit-uit, indien bekend. */
   lastStopAt: string | null;
+  /** Laatste afgeronde stop, voor de aparte bruto benchmark. */
+  lastStop?: MeasuredPitStop | null;
   stops: MeasuredPitStop[];
 }
 
@@ -185,6 +192,12 @@ export interface StrategySnapshot {
   sampleAgeSeconds: number;
   /** Basismeting van het pitverlies, bijvoorbeeld uit eerdere stops. */
   pitLaneSeconds: number | null;
+  /**
+   * Alleen een bewezen servicevrije pitlanebasis mag `computePitLoss` voeden.
+   * De bestaande servermediaan is bruto (service inbegrepen) en hoort hier dus
+   * niet in; die staat als aparte laatste-stop-benchmark in de UI.
+   */
+  serviceFreePitLaneSeconds?: number | null;
   secondsPerLitre: number | null;
   tyreSeconds: number | null;
   reserveLaps?: number;

@@ -13,10 +13,27 @@ import "../../../src/features/endurance/pitwall/test-premium/testPremium.css";
 const feed: PersonalPitFeed = {
   available: true,
   reason: null,
-  sessionKey: "session-fixture",
+  sessionKey: "sim-42-s1",
+  diagnostics: { pendingEdges: 0, rejectedEdges: 0, lastRejectReason: null },
   visits: [
-    { visitKey: "pit:130", pitLaneSeconds: 38.125, entryLap: 10, exitLap: 10, driver: "Coureur 134", source: "tyre_observation_pit_edges" },
-    { visitKey: "pit:80", pitLaneSeconds: 41.75, entryLap: 6, exitLap: 6, driver: "Coureur 134", source: "tyre_observation_pit_edges" },
+    {
+      visitKey: "pit-seg-abc-1",
+      pitLaneSeconds: 38.125,
+      entryObservedAt: "2026-11-21T12:00:00.000Z",
+      exitObservedAt: "2026-11-21T12:00:38.125Z",
+      entrySessionSeconds: 1001,
+      exitSessionSeconds: 1039.125,
+      source: "measurement_event_pit_edges",
+    },
+    {
+      visitKey: "pit-seg-abc-2",
+      pitLaneSeconds: 41.75,
+      entryObservedAt: "2026-11-21T11:47:00.000Z",
+      exitObservedAt: "2026-11-21T11:47:41.750Z",
+      entrySessionSeconds: 200,
+      exitSessionSeconds: 241.75,
+      source: "measurement_event_pit_edges",
+    },
   ],
 };
 
