@@ -248,10 +248,23 @@ SECTOR_RETENTION_OUT=/tmp/sector-retention-structural \
   node docs/pitwall-look/preview/sector-retention-shot.mjs
 ```
 
-Bewijs: `/tmp/sector-retention-structural/evidence.json` en acht screenshots
-(`poll-1-seq718.png` … `poll-8-complete-live.png`). De run controleert ook dat
-de opt-in trace geen `retained_reset` met `reason: identity` bevat en bij de
-gedeeltelijke rij `live_partial_ignored` met één gevulde slot laat zien.
+Bewijs: `docs/pitwall-look/evidence/sector-continuity-20261121/evidence.json` en
+acht screenshots (`poll-1-seq718.png` … `poll-8-complete-live.png`). De run
+controleert ook dat de opt-in trace geen `retained_reset` met
+`reason: identity` bevat en bij de gedeeltelijke rij `live_partial_ignored` met
+één gevulde slot laat zien.
+
+Persoonlijke pitduur, echte component:
+
+```bash
+PIT_DURATION_OUT=/tmp/pit-duration \
+  bash scripts/ensure-playwright-runtime.sh \
+  node docs/pitwall-look/preview/pit-duration-shot.mjs
+```
+
+Bewijs: `docs/pitwall-look/evidence/sector-continuity-20261121/personal-pit-duration.png`
+en `.json` (38.125 s, bron `tyre_observation_pit_edges`, copy
+"bruto pitstraattijd, service inbegrepen, geen netto raceverlies").
 
 Overige checks:
 

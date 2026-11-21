@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "card": {
+    "seconds": "38.125",
+    "text": "38.125 sRonde 10 · 2 stops in deze sessieBruto pitstraattijd, service inbegrepen. Geen netto raceverlies.",
+    "source": "tyre_observation_pit_edges"
+  },
+  "errors": []
+}

@@ -79,7 +79,7 @@ export function PitDurationPanel({ deviceId, enabled, load, pollMs = 5_000 }: Pr
             {visit.exitLap != null ? `Ronde ${visit.exitLap}` : "Afgeronde stop"}
             {feed && feed.visits.length > 1 ? ` · ${feed.visits.length} stops in deze sessie` : ""}
           </p>
-          <p className="mt-1 text-[10px] leading-snug text-slate-500">{PIT_DURATION_SEMANTICS}</p>
+          <p className="mt-1 text-[10px] leading-snug text-slate-400">{PIT_DURATION_SEMANTICS}</p>
         </div>
       ) : (
         <p className="text-[11px] text-slate-500">
