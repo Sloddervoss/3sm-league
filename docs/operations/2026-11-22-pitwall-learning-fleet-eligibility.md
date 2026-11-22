@@ -224,3 +224,24 @@ De productie-functiedumps die als bron zijn gebruikt staan lokaal in
   productie-DB, geen live site, geen deploy, geen push).
 - De voorgestelde uitrol is **wel** een productiewijziging en wacht op expliciete
   goedkeuring.
+
+## Uitgevoerd op productie (2026-11-22, na opdracht "iedereen met een connector moet bijdragen")
+
+- Preimage van beide functiebody's, ACL's, `runtime_settings` en tellingen bewaard:
+  `/home/hermes/artifacts/3sm/learning-fleet-20261122/preimage.sql`
+  (sha256 `1727abe3025d5c56c0193aa6f1c117b01ec653b753fce281e13871e4bbbdae5b`).
+- Migratie toegepast als `supabase_admin`; nieuwe hashes
+  `fuel_worker_provision` `9ba32134c906109c64e75b2b3f748047`,
+  `fuel_worker_source` `d3273acbc1c792bb052c00745a752f43`.
+- `fuel_worker_provision(100)` uitgevoerd als `pitwall_learning_worker`
+  (`SET SESSION AUTHORIZATION`) → **3**; `account_policy` bevat nu precies de drie
+  owners met een `active_binding`-device op 0.7.6.4. De eigenaar van het
+  0.4.2.1-device is niet ingeschreven; het 0.7.6.5-device is nu `inactive` en wordt
+  bij de eerstvolgende actieve binding automatisch opgepakt.
+- Live probe in een teruggedraaide transactie: source van device `81222914…`
+  (0.4.2.1) → `REFUSED`; source van device `e90ad2ca…` (0.7.6.4) →
+  `allowed=true`. Na `ROLLBACK`: `source_revisions` 0, `jobs` 0.
+- Nog niet live: de compose-healthcheck. Vereist een door de gebruiker
+  goedgekeurde wijziging aan `/opt/supabase/learning/…/compose.yml` plus
+  `docker compose up -d pitwall-learning-worker`. De container draait door
+  (`Up`, cycle elke 5 s); `unhealthy` blokkeert de leercyclus niet.
