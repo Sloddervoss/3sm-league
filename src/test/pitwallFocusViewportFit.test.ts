@@ -28,12 +28,14 @@ describe("pitwall focusweergave past op korte schermen", () => {
     expect(focusCss).toMatch(/grid-template-rows:[^;]*minmax\(170px, 0\.8fr\)[^;]*minmax\(260px, 1\.2fr\)/);
   });
 
-  it("geeft korte viewports een raster dat met de inhoud meegroeit", () => {
-    const short = focusCss.slice(focusCss.indexOf("@media (max-height: 900px)"));
-    expect(short).not.toBe("");
-    expect(short).toMatch(/\.ptp-root\s*{[^}]*height:\s*auto/);
-    expect(short).toMatch(/grid-template-rows:[^;]*minmax\(210px, auto\)[^;]*minmax\(220px, auto\)/);
-    expect(short).toMatch(/\.ptp-panels\s*{[^}]*height:\s*210px/);
+  it("zet op lage brede schermen de panelen naast het wedstrijdbeeld in plaats van eronder", () => {
+    const start = focusCss.indexOf("@media (max-height: 900px) and (min-width: 1100px)");
+    expect(start).toBeGreaterThan(-1);
+    const short = focusCss.slice(start);
+    expect(short).toMatch(/grid-template-areas:[^;]*"bench panels"[^;]*"main panels"/);
+    expect(short).toMatch(/\.ptp-panels\s*{[^}]*height:\s*auto/);
+    // Mobiel houdt de gestapelde compositie; de compacte variant mag daar niet gelden.
+    expect(short).not.toMatch(/@media \(max-height: 900px\)\s*{/);
   });
 
   it("houdt de overflow van de timingstabel binnen het paneel", () => {
