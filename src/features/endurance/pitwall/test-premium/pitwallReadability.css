@@ -1,0 +1,802 @@
+/* Leesbaarheidslaag voor de premium Pitwall
+   ────────────────────────────────────────────────────────────────────────────
+   De premiumweergave (test, Mijn Pitwall en de gedeelde meekijkstand) schaalde
+   op een 2560×1440-monitor de metadata, tabelcellen en paneeltekst terug naar
+   6,5–10 px. Dat is op monitordistance niet leesbaar en de focusweergave
+   compenseerde met nog kleinere letters in plaats van met scrollen.
+
+   Deze laag zet daarom een ondergrens van 11–12 px op labels/metadata, 13–14 px
+   op wedstrijdwaarden en houdt de hiërarchie (labels klein, waarden groot).
+   Tegelijk gaan de gedempte kleuren naar ≥4,5:1 op de donkere panelen en krijgt
+   de focusweergave een minimale hoogte per rij; liever scrollen dan krimpen.
+   Uitsluitend presentatie: geen query, sortering, autorisatie of berekening. */
+
+[data-pitwall-test-premium] {
+  --ptp-text: #eef3f8;
+  /* Was #8e9cac / #64717f; de laatste haalde 4,0:1 op de paginabodem en
+     3,77:1 op een paneel. */
+  --ptp-muted: #9aa9b8;
+  --ptp-dim: #8b9bad;
+  --ptp-read-label: 11.5px;
+  --ptp-read-meta: 12px;
+  --ptp-read-cell: 14px;
+}
+
+/* Paneelleegtes ("—") en de licentie-placeholder zijn informatie, geen decor. */
+[data-pitwall-test-premium] .ptp-empty,
+[data-pitwall-test-premium] .ptp-sr.is-empty {
+  color: #7c8b9b;
+}
+[data-pitwall-test-premium] .ptp-status.is-offline {
+  border-color: rgba(240, 117, 117, 0.34);
+  background: rgba(240, 117, 117, 0.07);
+  color: #f09090;
+}
+
+/* Deelstrook op Mijn Pitwall (buiten focus): de statusregel stond op 10 px en
+   de uitgeschakelde knop op 2,1:1. De strook is geen onderdeel van de
+   premiumkaart, maar staat wel op dezelfde pagina en telt mee voor de leesbaarheid. */
+[data-pitwall-personal] .pp-share .pp-share-state {
+  font-size: 11.5px;
+  color: #9aa9b8;
+}
+[data-pitwall-personal] .pp-share :is(.pp-share-primary, .pp-share-secondary, .pp-share-stop) {
+  font-size: 12px;
+}
+[data-pitwall-personal] .pp-share .pp-share-primary:disabled {
+  opacity: 1;
+  border-color: #6f3812;
+  background: #5c3217;
+  color: #f4e7db;
+}
+[data-pitwall-personal] .pp-viewer-strip .pp-viewer-focus {
+  font-size: 11.5px;
+}
+[data-pitwall-personal] .pp-share .pp-share-note {
+  color: #9aa9b8;
+  font-size: 12.5px;
+}
+
+/* In focus is de deelstrook een smalle bedieningsregel, geen setupblok. De
+   kop en de knop blijven bereikbaar; alleen de lange uitleg en de kicker
+   vervallen, zodat de vijf racepanelen in één beeld blijven. */
+[data-ptp-focus="true"][data-pitwall-personal] .pp-share {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 4px;
+  padding: 5px 10px;
+}
+[data-ptp-focus="true"][data-pitwall-personal] .pp-share .pp-share-head {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+[data-ptp-focus="true"][data-pitwall-personal] .pp-share .ptp-kicker,
+[data-ptp-focus="true"][data-pitwall-personal] .pp-share .pp-share-note {
+  display: none;
+}
+[data-ptp-focus="true"][data-pitwall-personal] .pp-share h2 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.15;
+}
+[data-ptp-focus="true"][data-pitwall-personal] .pp-share .pp-share-actions {
+  flex: none;
+  margin-left: auto;
+}
+[data-ptp-focus="true"][data-pitwall-personal] .pp-share .pp-share-primary,
+[data-ptp-focus="true"][data-pitwall-personal] .pp-share :is(.pp-share-secondary, .pp-share-stop) {
+  min-height: 28px;
+  padding: 3px 9px;
+  font-size: 11.5px;
+}
+
+/* De metarij mag krimpen noch tekst afkappen zolang er breedte is; hij wikkelt
+   naar een tweede regel in plaats van "3 beschikbaar" tot "3 besch…" te maken. */
+[data-pitwall-test-premium] .ptp-meta > div {
+  flex: 0 0 auto;
+}
+[data-pitwall-test-premium] .ptp-meta dd {
+  max-width: 280px;
+}
+
+/* Tailwind-utilities in de panelen/kaarten die onder de leesgrens zaten. */
+[data-pitwall-test-premium] :is(.text-\[8px\], .text-\[9px\]) {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] :is(.text-\[10px\], .text-\[10\.5px\]) {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .text-\[11px\] {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* ── Opgetilde basistypografie (gegenereerd uit de bestaande regels) ────── */
+
+/* 22 regels die te klein stonden -> 11px */
+[data-pitwall-test-premium] .ptp-dock-controls .ptp-controls-label {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-brandline {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-status {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-readonly {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-count {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-focus-label {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-class-count {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-move {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-you {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-pit {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-sector-lap-mark {
+  font-size: 11px;
+  line-height: 1.3;
+}
+.ptp-focus-count {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-status {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-readonly {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-meta dt {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > p:first-child {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:first-child {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(3) {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-tyre-fuel] > p:first-child {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] [data-ptp-circuit] [data-ptp-lap-labels] {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] > p:nth-child(1) {
+  font-size: 11px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] dl dt {
+  font-size: 11px;
+  line-height: 1.3;
+}
+/* 49 regels die te klein stonden -> 11.5px */
+[data-pitwall-test-premium] .ptp-controls-label {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-dock-status {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-brand {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-kicker {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-meta dt {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > p:first-child {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:first-child {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(3) {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-tyre-fuel] > p:first-child {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] [data-pitwall-slot]:not([data-premium-timing]) > header > div > span {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-live-pill {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-ghost-button {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-timing-tabs > button, [data-pitwall-test-premium] .ptp-class-filter button {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-focus-number {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-focus-gap {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-timing-table thead th.ptp-col-gap {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-class-row th {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-col-num {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-sr {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-col-lap {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-col-gap {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-panels [aria-label="Pace-weergave"] button, [data-pitwall-test-premium] .ptp-panels [aria-label="Timing-weergave"] button {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot="pitstop"] button {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-more > summary {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-footnote {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-timing-legend {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-sector-lap-mark {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+.ptp-focus-state {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+.ptp-focus-btn {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-mast-sub {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-meta dd {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-binding-sentence] {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] [data-ptp-circuit] [data-ptp-lap-badge] {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] > p:nth-child(3) {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-timing-tabs > button, [data-ptp-focus="true"] .ptp-class-filter button {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-focus-value {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-timing-note {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header h3 {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="tyres"] [data-pitwall-tyre-corner] > p:nth-child(4) {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="pitstop"] button {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-more > summary {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] [data-ptp-archive] h2 {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+.ptp-focus-brand {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+.ptp-focus-count {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-status {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-meta dt {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > p:first-child {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:first-child {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-focus-label {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+/* 22 regels die te klein stonden -> 12px */
+[data-pitwall-test-premium] .ptp-switch button {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-motion {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-override {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-mast-sub {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-meta dd {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content > p:nth-child(2) {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-binding-sentence] {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] [data-pitwall-slot]:not([data-premium-timing]) > header h3 {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-focus-value {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-timing-table thead th {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-driver-meta {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] .ptp-timing-note {
+  font-size: 12px;
+  line-height: 1.3;
+}
+.ptp-focus-brand {
+  font-size: 12px;
+  line-height: 1.3;
+}
+.ptp-focus-state.is-alert {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > p:nth-of-type(2) {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-compare li {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] [data-ptp-archive] li span:last-child {
+  font-size: 12px;
+  line-height: 1.3;
+}
+.ptp-focus-btn {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-meta dd {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-focus-value {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header h3 {
+  font-size: 12px;
+  line-height: 1.3;
+}
+[data-pitwall-test-premium] [data-ptp-circuit] [data-ptp-lap-labels] {
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+/* ── Wedstrijdwaarden blijven de grootste dingen op het scherm ──────────── */
+
+[data-pitwall-test-premium] .ptp-timing-table {
+  font-size: var(--ptp-read-cell);
+  line-height: 19px;
+}
+[data-pitwall-test-premium] .ptp-timing-table thead th {
+  height: 32px;
+  font-size: 11.5px;
+  line-height: 15px;
+}
+[data-pitwall-test-premium] .ptp-timing-table tbody td {
+  height: 46px;
+  padding-block: 5px;
+}
+[data-pitwall-test-premium] .ptp-col-pos,
+[data-pitwall-test-premium] .ptp-pos {
+  font-size: 15px;
+}
+[data-pitwall-test-premium] .ptp-driver-name {
+  font-size: 15.5px;
+  line-height: 19px;
+}
+[data-pitwall-test-premium] .ptp-team {
+  max-width: 160px;
+}
+
+/* De vijf panelen deelden op desktop een vaste rij van 236 px. Met leesbare
+   letters past de Pace-kaart daar niet meer in en werd "Laatste/Beste" een
+   halve regel. De rij groeit mee; de kaarten blijven onderling gelijk. */
+@media (min-width: 1081px) {
+  [data-pitwall-test-premium] .ptp-panels {
+    grid-auto-rows: 272px;
+  }
+  /* De gedeelde meekijkstand heeft geen pitbevestiging (owner-only) en dus
+     vier kaarten. Die vier vullen de rij; er blijft geen lege vijfde kolom. */
+  [data-pitwall-test-premium] .ptp-panels[data-ptp-panel-count="4"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+/* Een lange coureursnaam wikkelt in de eigen-auto-kaart; 3 px afkappen op
+   "Vincent" is precies de klasse fout die deze laag moet wegnemen. */
+[data-pitwall-test-premium] [data-pitwall-slot="own-car"] > p.truncate {
+  width: 100%;
+  overflow: visible;
+  white-space: normal;
+}
+[data-pitwall-test-premium] .ptp-col-time {
+  font-size: 14px;
+}
+[data-pitwall-test-premium] .ptp-col-sector {
+  font-size: 13px;
+}
+[data-pitwall-test-premium] .ptp-col-gap {
+  font-size: 13px;
+}
+[data-pitwall-test-premium] .ptp-col-lap {
+  font-size: 12px;
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-driver {
+  width: 190px;
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-car {
+  width: 164px;
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-sector {
+  width: clamp(74px, calc(400px / var(--ptp-sector-count, 1)), 92px);
+}
+[data-pitwall-test-premium] .ptp-timing-table .ptp-own-pinned > tr > td {
+  top: 32px;
+}
+
+/* Focus: dezelfde leesbare maat, geen tweede kleinere typografie. */
+[data-ptp-focus="true"] .ptp-mast-title h1 {
+  font-size: 20px;
+  line-height: 24px;
+}
+[data-ptp-focus="true"] .ptp-mast-sub {
+  font-size: 12px;
+  line-height: 16px;
+}
+[data-ptp-focus="true"] .ptp-status {
+  font-size: 11px;
+  line-height: 15px;
+  padding: 1px 6px;
+}
+[data-ptp-focus="true"] .ptp-readonly {
+  font-size: 11px;
+  line-height: 15px;
+}
+[data-ptp-focus="true"] .ptp-meta dt {
+  font-size: 11px;
+  line-height: 14px;
+}
+[data-ptp-focus="true"] .ptp-meta dd {
+  font-size: 12px;
+  line-height: 16px;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > p:first-child {
+  font-size: 11px;
+  line-height: 14px;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:first-child {
+  font-size: 11px;
+  line-height: 14px;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(2) {
+  font-size: 24px;
+  line-height: 26px;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group].pitwall-many-sectors > div > div > p:nth-child(2) {
+  font-size: 17px;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(3) {
+  font-size: 11px;
+  line-height: 14px;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] [role="status"] {
+  font-size: 16px;
+  line-height: 20px;
+}
+[data-ptp-focus="true"] .ptp-focus-label {
+  font-size: 11px;
+  line-height: 14px;
+}
+[data-ptp-focus="true"] .ptp-focus-pos {
+  font-size: 14px;
+}
+[data-ptp-focus="true"] .ptp-focus-value {
+  font-size: 13px;
+  line-height: 16px;
+}
+[data-ptp-focus="true"] .ptp-focus-number {
+  font-size: 12px;
+}
+[data-ptp-focus="true"] .ptp-focus-gap {
+  font-size: 13px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header h3 {
+  font-size: 13px;
+  line-height: 17px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header {
+  min-height: 34px;
+}
+/* De Pace-kaart is de enige met een grafiek én een waardenrij. Op 210 px
+   hoogte schoot de rij "Laatste/Beste" 15 px tekort; de grafiek levert die
+   ruimte, niet de letters. */
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="pace"] [data-pitwall-pace-graph] {
+  height: 56px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="pace"] dl {
+  margin-top: 6px;
+}
+[data-ptp-focus="true"] .ptp-panel-head h2 {
+  font-size: 13px;
+}
+[data-ptp-focus="true"] .ptp-panel-head {
+  min-height: 38px;
+}
+[data-ptp-focus="true"] .ptp-timing-tabs {
+  min-height: 30px;
+}
+[data-ptp-focus="true"] .ptp-timing-tabs > button,
+[data-ptp-focus="true"] .ptp-class-filter button {
+  min-height: 28px;
+  font-size: 11.5px;
+}
+[data-ptp-focus="true"] .ptp-timing-table tbody td {
+  height: 48px;
+}
+[data-ptp-focus="true"] .ptp-timing-table thead th {
+  height: 34px;
+  font-size: 11.5px;
+}
+[data-ptp-focus="true"] .ptp-timing-table .ptp-own-pinned > tr > td {
+  top: 34px;
+}
+[data-ptp-focus="true"] .ptp-timing-note {
+  font-size: 12px;
+  line-height: 16px;
+  padding-block: 5px;
+}
+
+/* De losse pitbenchmark is een bronregel, geen hoofdblok. In focus staat de
+   waarde naast de titel in plaats van eronder; de uitleg blijft volledig. */
+[data-ptp-focus="true"] .ptp-pit-benchmark > section {
+  display: grid;
+  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
+  align-items: center;
+  padding: 6px 10px;
+}
+[data-ptp-focus="true"] .ptp-pit-benchmark > section > header {
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 0;
+  padding: 0;
+  border-bottom: 0;
+}
+[data-ptp-focus="true"] .ptp-pit-benchmark > section > div {
+  grid-column: 2;
+  grid-row: 1;
+  padding: 0;
+}
+[data-ptp-focus="true"] .ptp-pit-benchmark [data-pit-benchmark-label="true"] {
+  margin-top: 0;
+}
+
+/* ── Focuslayout: liever scrollen dan de vijf panelen wegschalen ────────── */
+
+/* De vaste metakolommen kapten "3 beschikbaar" en "12m geleden" af terwijl er
+   op een 2560-monitor ruimte genoeg is. Laat de vier bronkolommen op hun
+   inhoud passen; de twee eerste blijven de vrije ruimte verdelen. */
+@media (min-width: 1081px) {
+  [data-pitwall-test-premium] .ptp-meta {
+    grid-template-columns: minmax(180px, 2fr) minmax(90px, 1fr) 92px 116px 120px 190px;
+  }
+}
+
+@media (min-height: 901px) {
+  [data-ptp-focus="true"] .ptp-root {
+    /* De panelenrij is hoog genoeg voor kop en kernwaarde; de detailtekst
+       scrollt binnen de kaart. Zo blijven alle vijf kaarten in één beeld
+       zonder de letters te verkleinen. */
+    grid-template-rows: auto auto auto auto minmax(310px, 1fr) minmax(230px, 18dvh) auto;
+    gap: 6px;
+  }
+  [data-ptp-focus="true"] .ptp-main {
+    min-height: 310px;
+  }
+  [data-ptp-focus="true"] .ptp-panels {
+    min-height: 230px;
+    height: auto;
+    grid-auto-rows: minmax(0, 1fr);
+  }
+  /* De deelstrook staat boven het raster; geef het raster die hoogte terug
+     in plaats van de panelen onder de vouw te schuiven. */
+  [data-ptp-focus="true"] .ptp-focus-shell:has(> .pp-share) .ptp-root {
+    height: calc(100dvh - 124px);
+  }
+}
+@media (max-height: 900px) and (min-width: 1100px) {
+  [data-ptp-focus="true"] .ptp-root {
+    grid-template-rows: auto auto auto minmax(400px, 1fr) auto auto;
+  }
+  [data-ptp-focus="true"] .ptp-main {
+    min-height: 400px;
+  }
+  [data-ptp-focus="true"] .ptp-panels {
+    min-height: 230px;
+  }
+}
+
+/* Alleen op een breed én laag scherm (ultrawide) blijven het wedstrijdbeeld en
+   de panelen naast elkaar staan. Op 1280–1400 px is die tweedeling te krap:
+   de timingvergelijking en de panelen werden dan tot onleesbare kolommen
+   geperst. Daar stapelt de bestaande compositie en scrolt de focus-shell. */
+@media (max-height: 900px) and (min-width: 1100px) and (max-width: 1499px) {
+  [data-ptp-focus="true"] .ptp-root {
+    height: calc(100dvh - 58px);
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto minmax(380px, auto) auto auto;
+    grid-template-areas: none;
+  }
+  [data-ptp-focus="true"] .ptp-masthead,
+  [data-ptp-focus="true"] .ptp-kpi,
+  [data-ptp-focus="true"] .ptp-root > .flex.flex-col.gap-3,
+  [data-ptp-focus="true"] .ptp-pit-benchmark,
+  [data-ptp-focus="true"] .ptp-main,
+  [data-ptp-focus="true"] .ptp-panels,
+  [data-ptp-focus="true"] .ptp-more {
+    grid-area: auto;
+  }
+}
+
+/* Vijf panelen naast elkaar kan vanaf ~1400 px. Daaronder wikkelen ze naar
+   drie kolommen; de focus-shell scrolt, niets verdwijnt achter een drawer. */
+@media (max-width: 1400px) {
+  [data-ptp-focus="true"] .ptp-root {
+    grid-template-rows: auto auto auto auto minmax(380px, auto) auto auto;
+  }
+  [data-ptp-focus="true"] .ptp-panels {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: minmax(200px, auto);
+    height: auto;
+  }
+  [data-ptp-focus="true"] .ptp-panels[data-ptp-panel-count="4"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  [data-ptp-focus="true"] .ptp-panels .ptp-panel-wrap,
+  [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] {
+    height: auto;
+    min-height: 200px;
+  }
+}
+
+/* Op smalle schermen blijven de panelen stapelen; niets wordt verborgen. */
+@media (max-width: 1080px) {
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-driver {
+    width: 160px;
+  }
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-car {
+    width: 140px;
+  }
+}

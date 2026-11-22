@@ -24,6 +24,9 @@ import { PremiumTimingPanel } from "./PremiumTimingPanel";
 import { useSectorLayoutCount } from "./useSectorLayout";
 import "./testPremium.css";
 import "./premiumFocus.css";
+// Leesbaarheidsondergrens; staat na de bestaande lagen zodat dezelfde
+// selectors winnen zonder de oorspronkelijke opmaak te herschrijven.
+import "./pitwallReadability.css";
 
 type TyreState = ReturnType<typeof useTyreModel>;
 
@@ -190,7 +193,7 @@ export function PitwallPremiumView({
         </div>
       </div>
 
-      <div className="ptp-panels" data-pitwall-row="panels">
+      <div className="ptp-panels" data-pitwall-row="panels" data-ptp-panel-count={readOnly ? 4 : 5}>
         {panel(
           "pace",
           <PacePanel
