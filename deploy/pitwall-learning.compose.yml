@@ -19,6 +19,20 @@ services:
     environment:
       PGUSER: pitwall_learning_worker
       PGAPPNAME: 3sm-pitwall-learning
+    # De base-image (supabase/postgres) heeft een HEALTHCHECK die
+    # `pg_isready -U postgres -h localhost` doet. Deze container draait geen
+    # database, dus die melding is altijd unhealthy. Prik de healthcheck op
+    # dezelfde PG*-variabelen als de worker zelf gebruikt.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          pg_isready -q -h "$${PGHOST:-supabase-db}" -p "$${PGPORT:-5432}"
+          -U "$${PGUSER:-pitwall_learning_worker}" -d "$${PGDATABASE:-postgres}"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     stop_grace_period: 15s
     logging:
