@@ -175,7 +175,11 @@
   display: grid;
   flex: 0 0 auto;
   height: calc(100dvh - 58px);
-  grid-template-rows: auto auto auto minmax(270px, 1fr) clamp(168px, 21dvh, 240px) auto;
+  /* De timingstabel kreeg de vaste clamp-rij en hield daardoor ~117 px over:
+     twee zichtbare regels van een wedstrijdveld. De track/timing-rij is juist
+     het wedstrijdbeeld, dus die krijgt het grootste aandeel en de panelenrij
+     wordt compact. */
+  grid-template-rows: auto auto auto minmax(170px, 0.8fr) minmax(260px, 1.2fr) clamp(150px, 18dvh, 210px) auto;
   gap: 6px;
   min-height: 0;
   margin: 0;
@@ -367,6 +371,14 @@
 }
 
 /* Kaart en timing delen de hoofdrij en de volledige resthoogte. */
+/* De timingstabel is hoger dan zijn rij en de binnenste scroller klipt hem wel,
+   maar de tabel rekte toch het scrollgebied van de focus-shell op (~540 px),
+   waardoor de onderkant van het dashboard buiten beeld viel. Paint-containment
+   op het paneel houdt die overflow binnen het paneel; de tabel blijft in zijn
+   eigen venster scrollen. */
+[data-ptp-focus="true"] .ptp-timing {
+  contain: paint;
+}
 [data-ptp-focus="true"] .ptp-main {
   grid-template-columns: clamp(260px, 24vw, 390px) minmax(0, 1fr);
   gap: 6px;
@@ -835,5 +847,26 @@
 @media (prefers-reduced-motion: reduce) {
   [data-ptp-focus="true"] .ptp-focus-shell {
     scroll-behavior: auto;
+  }
+}
+
+/* ── Korte viewports ──────────────────────────────────────────────────────
+   Het vaste raster hierboven gaat uit van genoeg hoogte: de rijen hebben een
+   minimum en samen precies één scherm. Op een 1280×720-scherm is er minder
+   hoogte dan de som van die minima, waardoor de panelenrij naar 0 px kromp en
+   de hele onderste rij (pace, fuel, banden, pitstop, mijn sessie) onzichtbaar
+   werd. Laat het raster daar meegroeien met de inhoud; de focus-shell scrolt
+   al, dus alles blijft bereikbaar in plaats van weg te vallen. */
+@media (max-height: 900px) {
+  [data-ptp-focus="true"] .ptp-root {
+    height: auto;
+    min-height: calc(100dvh - 58px);
+    grid-template-rows: auto auto auto minmax(210px, auto) minmax(220px, auto) auto;
+  }
+  [data-ptp-focus="true"] .ptp-main {
+    height: 300px;
+  }
+  [data-ptp-focus="true"] .ptp-panels {
+    height: 210px;
   }
 }

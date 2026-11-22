@@ -1606,6 +1606,12 @@
   outline: 2px solid var(--ptp-orange);
   outline-offset: -2px;
 }
+/* Een gesloten <details> verbergt zijn inhoud; `display: grid` hieronder zette
+   die regel buiten werking, waardoor "Meer analyse" altijd open stond en een
+   blok van ~560 px onder het dashboard hing. */
+[data-pitwall-test-premium] .ptp-more:not([open]) > .ptp-more-body {
+  display: none;
+}
 [data-pitwall-test-premium] .ptp-more-body {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
