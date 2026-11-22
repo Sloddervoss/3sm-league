@@ -24,11 +24,9 @@ services:
     # database, dus die melding is altijd unhealthy. Prik de healthcheck op
     # dezelfde PG*-variabelen als de worker zelf gebruikt.
     healthcheck:
-      test:
-        - CMD-SHELL
-        - >-
-          pg_isready -q -h "$${PGHOST:-supabase-db}" -p "$${PGPORT:-5432}"
-          -U "$${PGUSER:-pitwall_learning_worker}" -d "$${PGDATABASE:-postgres}"
+      # Geen argumenten: pg_isready leest PGHOST/PGPORT/PGUSER/PGDATABASE uit
+      # de env-file en test dus precies de database die de worker gebruikt.
+      test: ["CMD", "pg_isready"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -241,7 +241,16 @@ De productie-functiedumps die als bron zijn gebruikt staan lokaal in
 - Live probe in een teruggedraaide transactie: source van device `81222914…`
   (0.4.2.1) → `REFUSED`; source van device `e90ad2ca…` (0.7.6.4) →
   `allowed=true`. Na `ROLLBACK`: `source_revisions` 0, `jobs` 0.
-- Nog niet live: de compose-healthcheck. Vereist een door de gebruiker
-  goedgekeurde wijziging aan `/opt/supabase/learning/…/compose.yml` plus
-  `docker compose up -d pitwall-learning-worker`. De container draait door
-  (`Up`, cycle elke 5 s); `unhealthy` blokkeert de leercyclus niet.
+- Compose-healthcheck live gezet in
+  `/opt/supabase/learning/pitwall-learning-0.7.6.3-572d4cf8/compose.yml`
+  (backup `compose.yml.bak-20261122`), daarna alleen de workerservice
+  gerecreëerd met dezelfde image
+  `sha256:e93a4b051ed33abe074bcc964f26b0d2d3ebdc64a27eb232e62df2bc5f8f05ca`.
+  De check is `["CMD", "pg_isready"]`: zonder argumenten leest libpq
+  `PGHOST/PGPORT/PGUSER/PGDATABASE` uit de env-file. Bewezen in de container:
+  `supabase-db:5432 - accepting connections`, exit 0. Na recreate:
+  **healthy, fails=0, restarts=0**, Deno-proces draait door.
+- De template in `deploy/pitwall-learning.compose.yml` volgt dezelfde vorm, zodat
+  template en werkelijkheid niet uiteenlopen; de twee healthcheck-tests toetsen
+  nu de invariant (geen `localhost`, geen `-U postgres`, wel de PG*-variabelen)
+  in plaats van éénletterlijke string. 4/4 tests groen, ESLint schoon.
