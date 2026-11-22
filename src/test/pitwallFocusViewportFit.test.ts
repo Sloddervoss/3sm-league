@@ -23,9 +23,14 @@ const premiumCss = readFileSync(
 );
 
 describe("pitwall focusweergave past op korte schermen", () => {
-  it("legt de timingrij niet meer vast in een clamp die naar 168px kan krimpen", () => {
+  it("geeft de vrije hoogte aan het wedstrijdbeeld in plaats van aan een lege pitbenchmark", () => {
     expect(focusCss).not.toContain("clamp(168px, 21dvh, 240px)");
-    expect(focusCss).toMatch(/grid-template-rows:[^;]*minmax\(170px, 0\.8fr\)[^;]*minmax\(260px, 1\.2fr\)/);
+    // De benchmarkrij groeit met de inhoud en het wedstrijdbeeld vult de rest.
+    expect(focusCss).toMatch(
+      /grid-template-rows:\s*auto auto auto auto minmax\(0, 1fr\) clamp\(150px, 18dvh, 210px\) auto/,
+    );
+    // Een lege benchmarkhouder (geen gemeten stop) bezet geen rijhoogte.
+    expect(focusCss).toMatch(/\.ptp-pit-benchmark:empty\s*{[^}]*display:\s*none/);
   });
 
   it("zet op lage brede schermen de panelen naast het wedstrijdbeeld in plaats van eronder", () => {
