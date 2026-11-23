@@ -1,3 +1,4 @@
+import { Monitor } from "lucide-react";
 import type { PitwallConnectionState } from "../PitwallContextBar";
 
 const statusCopy: Record<PitwallConnectionState, { label: string; tone: string; detail: string }> = {
@@ -7,9 +8,16 @@ const statusCopy: Record<PitwallConnectionState, { label: string; tone: string; 
 };
 
 /**
- * Compacte contextkop. Geen grote lege hero: één titel, één identiteitsregel en
- * een korte metarij met uitsluitend bronwaarden. De verbindingsstatus is de
- * enige plek met LIVE/VERTRAAGD/OFFLINE.
+ * Compacte contextkop, race-eerst.
+ *
+ * De circuitnaam is de titel; coureur, nummer, auto en team staan er direct
+ * onder. De apparaatnaam is context, geen hoofdonderwerp. Alleen bronvelden
+ * blijven zichtbaar: connector, laatst gezien en telemetrieleeftijd. De
+ * circuit- en teammeta blijven in de DOM voor bestaande contracten, maar zijn
+ * visueel dubbel met de titel/regel erboven en worden niet nog eens getoond.
+ *
+ * De technische pollregel blijft als schermlezerdetail bestaan; hij is geen
+ * tweede zichtbare status naast LIVE/OFFLINE.
  */
 export function PremiumMasthead({
   deviceName,
@@ -24,6 +32,7 @@ export function PremiumMasthead({
   sectorCount,
   refreshing,
   tag = "PITWALL TEST",
+  carNumber = null,
 }: {
   deviceName: string;
   trackLabel: string;
@@ -39,75 +48,81 @@ export function PremiumMasthead({
   refreshing: boolean;
   /** Productietag; de testroute houdt de bestaande aanduiding. */
   tag?: string;
+  carNumber?: string | null;
 }) {
   const copy = statusCopy[state];
   const telemetryDetail = state === "live"
-    ? "telemetrie nu"
+    ? "nu"
     : telemetryAge && telemetryAge !== "—"
       ? `laatste telemetrie ${telemetryAge}`
       : "nog geen telemetrie ontvangen";
+  const identity = [
+    driverName?.trim() || null,
+    carNumber ? `#${carNumber.trim().replace(/^#/, "")}` : null,
+    carName?.trim() || null,
+    teamName?.trim() || null,
+  ].filter(Boolean).join(" · ");
+
   return (
-    <header className="ptp-masthead" data-pitwall-connection={state}>
-      <div className="ptp-brandline">
+    <header
+      className="ptp-masthead"
+      data-pitwall-connection={state}
+      data-ptp-sectors={sectorCount > 0 ? "known" : "unknown"}
+    >
+      <div className="ptp-mast-brand">
         <span className="ptp-brand">3SM</span>
         <span className="ptp-brand-sub">RACE OPERATIONS</span>
-        <span className="ptp-brand-rule" aria-hidden />
         <span className="ptp-brand-tag">{tag}</span>
       </div>
 
-      <div className="ptp-mast-main">
-        <div className="ptp-mast-title">
-          <p className="ptp-kicker">Live device</p>
-          <h1>{deviceName}</h1>
-          <p className="ptp-mast-sub">
-            {trackLabel || "Geen sessie"}
-            {driverName ? ` · ${driverName}` : ""}
-            {carName ? ` · ${carName}` : ""}
-          </p>
-        </div>
-
-        <div className="ptp-status-block">
-          <span className={`ptp-status ${copy.tone}`}>
-            <span aria-hidden className="ptp-status-dot" />
-            {copy.label}
-          </span>
-          <span className="ptp-readonly" data-ptp-polling={state}>{copy.detail}</span>
-          {state !== "live" && (
-            <span className="ptp-readonly" data-ptp-telemetry-age={telemetryAge ?? "unknown"}>
-              {telemetryDetail}
-            </span>
-          )}
-        </div>
+      <div className="ptp-mast-title">
+        <h1 className="ptp-mast-device">
+          <Monitor aria-hidden size={13} />
+          {deviceName}
+        </h1>
+        <p className="ptp-mast-track">{trackLabel || "Geen sessie"}</p>
+        <p className="ptp-mast-sub">{identity || "Coureur en auto onbekend"}</p>
       </div>
 
-      <dl className="ptp-meta">
-        <div>
-          <dt>Circuit</dt>
-          <dd>{trackLabel || "—"}</dd>
-        </div>
-        <div>
-          <dt>Team</dt>
-          <dd>{teamName || "—"}</dd>
-        </div>
-        <div>
-          <dt>Connector</dt>
-          <dd>{connector ?? "—"}</dd>
-        </div>
-        <div>
-          <dt>Apparaat gezien</dt>
-          <dd>{lastSeen}</dd>
-        </div>
-        <div>
-          <dt>Sectoren</dt>
-          <dd className={sectorCount > 0 ? undefined : "is-muted"}>
-            {sectorCount > 0 ? `${sectorCount} beschikbaar` : "niet beschikbaar"}
-          </dd>
-        </div>
-          <div className="ptp-meta-refresh" aria-hidden={!refreshing} style={{ visibility: refreshing ? 'visible' : 'hidden' }}>
+      <div className="ptp-mast-side">
+        <span className={`ptp-status ${copy.tone}`}>
+          <span aria-hidden className="ptp-status-dot" />
+          {copy.label}
+        </span>
+        <span className="ptp-sr-only" data-ptp-polling={state}>{copy.detail}</span>
+        <dl className="ptp-meta">
+          {/* Bestaande contractvelden. Circuit en team staan al in de titel en
+              identiteitsregel; daarom hier niet nog een keer zichtbaar. */}
+          <div className="ptp-meta-legacy">
+            <dt>Circuit</dt>
+            <dd>{trackLabel || "—"}</dd>
+          </div>
+          <div className="ptp-meta-legacy">
+            <dt>Team</dt>
+            <dd>{teamName || "—"}</dd>
+          </div>
+          <div>
+            <dt>Connector</dt>
+            <dd>{connector ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>Apparaat gezien</dt>
+            <dd>{lastSeen}</dd>
+          </div>
+          <div>
+            <dt>Telemetrie</dt>
+            <dd data-ptp-telemetry-age={telemetryAge ?? "unknown"}>{telemetryDetail}</dd>
+          </div>
+          <div
+            className="ptp-meta-refresh"
+            aria-hidden={!refreshing}
+            style={{ visibility: refreshing ? "visible" : "hidden" }}
+          >
             <dt>Update</dt>
             <dd>telemetrie verversen…</dd>
           </div>
-      </dl>
+        </dl>
+      </div>
     </header>
   );
 }

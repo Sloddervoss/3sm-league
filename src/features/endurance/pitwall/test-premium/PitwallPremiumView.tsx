@@ -27,6 +27,9 @@ import "./premiumFocus.css";
 // Leesbaarheidsondergrens; staat na de bestaande lagen zodat dezelfde
 // selectors winnen zonder de oorspronkelijke opmaak te herschrijven.
 import "./pitwallReadability.css";
+// Structuur- en copyopruiming; staat na de leesbaarheidslaag, verandert geen
+// query, sortering, autorisatie of berekening.
+import "./premiumClean.css";
 
 type TyreState = ReturnType<typeof useTyreModel>;
 
@@ -138,6 +141,7 @@ export function PitwallPremiumView({
         driverName={ownDriverName}
         carName={ownCarName}
         teamName={linkedTeamName}
+        carNumber={live ? v3?.opponents?.find((c) => c.isPlayer)?.carNumber ?? null : null}
         connector={detail.health?.connector_version ?? null}
         lastSeen={lastSeen}
         telemetryAge={telemetryAge}

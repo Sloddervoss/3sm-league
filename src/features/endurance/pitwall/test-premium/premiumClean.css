@@ -1,0 +1,797 @@
+/* Premium Pitwall — clean hierarchy pass
+   ────────────────────────────────────────────────────────────────────────────
+   Presentation only, loaded after the premium, focus and readability layers.
+   The readability layer fixed size and contrast; this layer removes the
+   repetition that made the same screen feel busy:
+
+   - race identity is the header, the device name is context;
+   - the timing panel has one title and one mode switch instead of a kicker,
+     a heading and a tab with the same words;
+   - position and gap sit before the lap-time columns, the way running order
+     and relative are separate in the iRacing black boxes and in FIA WEC
+     timing;
+   - one class band is only drawn when there is more than one class;
+   - helper sentences are one line with the full explanation in a title.
+
+   No data, query, sorting, authorization, route or panel is changed. Classic
+   and non-premium pitwall renders never receive this wrapper. */
+
+/* ── Context header: circuit, driver, car, then device ─────────────────── */
+
+[data-pitwall-test-premium] .ptp-masthead {
+  display: grid;
+  grid-template-columns: 142px minmax(0, 1fr) minmax(330px, auto);
+  align-items: center;
+  gap: 0 18px;
+  margin-bottom: 8px;
+  padding: 8px 14px;
+}
+
+[data-pitwall-test-premium] .ptp-mast-brand {
+  display: flex;
+  align-self: stretch;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+  padding-right: 14px;
+  border-right: 1px solid var(--ptp-line-soft);
+}
+
+[data-pitwall-test-premium] .ptp-brand {
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+[data-pitwall-test-premium] .ptp-brand-sub {
+  font-size: 14px;
+  line-height: 1.15;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+[data-pitwall-test-premium] .ptp-brand-tag {
+  margin-top: 2px;
+  padding: 0 5px;
+  font-size: 14px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+[data-pitwall-test-premium] .ptp-mast-title {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+[data-pitwall-test-premium] .ptp-mast-title h1.ptp-mast-device {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ptp-dim);
+}
+
+[data-pitwall-test-premium] .ptp-mast-device svg {
+  flex: none;
+  color: #64717f;
+}
+
+[data-pitwall-test-premium] .ptp-mast-track {
+  margin: 1px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Exo 2", sans-serif;
+  font-size: 27px;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #f4f8fb;
+}
+
+[data-pitwall-test-premium] .ptp-mast-sub {
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 1.3;
+  color: #a7b5c3;
+}
+
+[data-pitwall-test-premium] .ptp-mast-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+[data-pitwall-test-premium] .ptp-mast-side > .ptp-status {
+  padding: 1px 8px;
+  line-height: 1.25;
+}
+
+[data-pitwall-test-premium] .ptp-mast-side .ptp-status.is-live,
+[data-pitwall-test-premium] .ptp-mast-side .ptp-status.is-stale,
+[data-pitwall-test-premium] .ptp-mast-side .ptp-status.is-offline {
+  border-color: transparent;
+  background: transparent;
+  padding-inline: 0;
+}
+
+[data-pitwall-test-premium] .ptp-mast-side .ptp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+[data-pitwall-test-premium] .ptp-meta > div {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+[data-pitwall-test-premium] .ptp-meta dt {
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: #7c8b9b;
+}
+
+[data-pitwall-test-premium] .ptp-meta dd {
+  max-width: 280px;
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #c9d5e0;
+}
+
+/* Circuit and team are already the title and identity line. The elements keep
+   their existing place in the DOM for the six-field contract. */
+[data-pitwall-test-premium] .ptp-meta > .ptp-meta-legacy {
+  display: none;
+}
+
+/* The refresh field only takes space while it is true; the inline visibility
+   contract on .ptp-meta-refresh stays intact. */
+[data-pitwall-test-premium] .ptp-meta-refresh[aria-hidden="true"] {
+  display: none;
+}
+
+[data-pitwall-test-premium] .ptp-meta-refresh dd {
+  font-weight: 700;
+  color: var(--ptp-amber);
+}
+
+/* Screen-reader-only supplement (including the legacy poll wording). */
+[data-pitwall-test-premium] .ptp-sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* ── Timing header: one title, one mode switch, one local status ───────── */
+
+[data-pitwall-test-premium] .ptp-timing-head {
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  min-height: 44px;
+  padding: 6px 12px;
+}
+
+[data-pitwall-test-premium] .ptp-timing-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-pitwall-test-premium] .ptp-timing-title h2 {
+  font-size: 20px;
+  line-height: 1.1;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+[data-pitwall-test-premium] .ptp-timing-count {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--ptp-dim);
+  white-space: nowrap;
+}
+
+[data-pitwall-test-premium] .ptp-timing-head .ptp-timing-tabs {
+  display: flex;
+  flex: none;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  min-height: 0;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+[data-pitwall-test-premium] .ptp-timing-head .ptp-timing-tabs > button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #aebbc8;
+}
+
+[data-pitwall-test-premium] .ptp-timing-head .ptp-timing-tabs > button:hover {
+  border-color: var(--ptp-line);
+  color: var(--ptp-text);
+}
+
+[data-pitwall-test-premium] .ptp-timing-head .ptp-timing-tabs > button[aria-pressed="true"] {
+  background: var(--ptp-orange);
+  color: #0a0d10;
+}
+
+[data-pitwall-test-premium] .ptp-timing-head .ptp-timing-actions {
+  flex: none;
+  margin-left: 0;
+  gap: 10px;
+}
+
+[data-pitwall-test-premium] .ptp-timing-head .ptp-live-pill {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+[data-pitwall-test-premium] .ptp-timing-head .ptp-ghost-button {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+[data-pitwall-test-premium] .ptp-timing-filterrow {
+  flex: none;
+  padding: 3px 10px 4px;
+  border-bottom: 1px solid var(--ptp-line-soft);
+  background: #0a0e13;
+}
+
+[data-pitwall-test-premium] .ptp-timing-filterrow .ptp-class-filter {
+  margin: 0;
+}
+
+[data-pitwall-test-premium] .ptp-timing-filterrow .ptp-class-filter button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+[data-pitwall-test-premium] .ptp-timing-legend {
+  padding: 3px 12px 4px;
+  font-size: 14px;
+  line-height: 1.3;
+  color: #8f9eae;
+}
+
+/* Een klasseband met één klasse zegt niets extra; de rijen en het bestaande
+   colspan-contract blijven in de DOM. */
+[data-pitwall-test-premium] .ptp-timing[data-ptp-single-class="true"] .ptp-class-row {
+  display: none;
+}
+
+/* ── Relative strip: closest cars, separated from running order ────────── */
+
+[data-pitwall-test-premium] .ptp-focus-cell {
+  padding: 5px 12px 6px;
+}
+
+[data-pitwall-test-premium] .ptp-focus-label {
+  margin-bottom: 1px;
+}
+
+[data-pitwall-test-premium] .ptp-focus-value {
+  gap: 7px;
+}
+
+[data-pitwall-test-premium] .ptp-focus-pos {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+[data-pitwall-test-premium] .ptp-focus-gap {
+  font-size: 15px;
+}
+
+[data-pitwall-test-premium] .ptp-focus-gap-note {
+  flex: none;
+  margin-left: -3px;
+  font-family: "Exo 2", sans-serif;
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 600;
+  color: #8f9eae;
+}
+
+@media (max-width: 1499px) {
+  [data-pitwall-test-premium] .ptp-focus-gap-note {
+    display: none;
+  }
+}
+
+/* ── Timing table: position and gap before lap times ───────────────────── */
+
+[data-pitwall-test-premium] .ptp-timing-table {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+[data-pitwall-test-premium] .ptp-timing-table thead th {
+  height: 34px;
+  padding: 5px 6px;
+  font-size: 15px;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+  color: #b7c4d1;
+}
+
+[data-pitwall-test-premium] .ptp-timing-table thead th.ptp-col-pos {
+  padding-left: 10px;
+}
+
+[data-pitwall-test-premium] .ptp-timing-table thead th.ptp-col-gap {
+  width: 96px;
+  padding-inline: 6px;
+  font-size: 15px;
+}
+
+[data-pitwall-test-premium] .ptp-timing-table tbody td {
+  height: 48px;
+  padding: 4px 6px;
+}
+
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-pos { width: 54px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-num { width: 38px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-driver { width: 200px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-gap { width: 96px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-time { width: 86px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-sector {
+  width: clamp(78px, calc(400px / var(--ptp-sector-count, 1)), 96px);
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-lap { width: 52px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-pit { width: 48px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-car { width: 176px; }
+
+[data-pitwall-test-premium] .ptp-timing-table .ptp-own-pinned > tr > td {
+  top: 34px;
+}
+
+[data-pitwall-test-premium] .ptp-pos {
+  font-size: 17px;
+  line-height: 19px;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-pitwall-test-premium] .ptp-col-gap {
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  line-height: 19px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #d7e1ea;
+}
+
+[data-pitwall-test-premium] .ptp-timing-table tbody tr.is-own .ptp-col-gap {
+  color: #ffb27a;
+}
+
+/* The pinned row is a fallback while the real row is off-screen; keep it
+   visible but quieter than the live own-car row in the classification. */
+[data-pitwall-test-premium] .ptp-timing-table tbody.ptp-own-pinned > tr > td {
+  background: #18120e;
+}
+
+[data-pitwall-test-premium] .ptp-col-time {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-pitwall-test-premium] .ptp-last {
+  color: #f0f4f8;
+}
+
+[data-pitwall-test-premium] .ptp-best {
+  color: #8fe0b4;
+}
+
+[data-pitwall-test-premium] .ptp-col-sector {
+  font-variant-numeric: tabular-nums;
+}
+
+[data-pitwall-test-premium] .ptp-col-lap {
+  font-variant-numeric: tabular-nums;
+  color: #c3ced9;
+}
+
+[data-pitwall-test-premium] .ptp-timing-note {
+  padding: 5px 12px 6px;
+  font-size: 14px;
+  line-height: 1.3;
+  color: #8f9eae;
+}
+
+/* ── Card chrome: fewer labels, same values ────────────────────────────── */
+
+[data-pitwall-test-premium] .ptp-panel-head h2 {
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+/* "eigen auto" above the Pace card and "testmodus" above Mijn sessie repeat
+   the page tag and the card content; the card title alone is enough. */
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot="pace"] > header > div > span,
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot="my-session"] > header > div > span {
+  display: none;
+}
+
+/* The driver name already says who it is under "Mijn sessie". */
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot="my-session"] > div > div:first-child > p:first-child {
+  display: none;
+}
+
+/* Own-car card: identity left, the three values right, one compact strip
+   under the map instead of a second block of headings and lines. */
+@media (min-width: 1500px) {
+  [data-pitwall-test-premium] [data-pitwall-slot="own-car"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(198px, 58%, 252px);
+    grid-template-rows: auto auto auto;
+    align-items: center;
+    column-gap: 12px;
+    padding: 7px 12px 8px;
+  }
+  [data-pitwall-test-premium] [data-pitwall-slot="own-car"] > p:first-child {
+    grid-column: 1 / -1;
+    margin: 0 0 2px;
+  }
+  [data-pitwall-test-premium] [data-pitwall-slot="own-car"] > p:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.15;
+  }
+  [data-pitwall-test-premium] [data-pitwall-slot="own-car"] > p:nth-child(3) {
+    grid-column: 1;
+    grid-row: 3;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+  [data-pitwall-test-premium] [data-pitwall-slot="own-car"] > dl {
+    display: grid;
+    grid-column: 2;
+    grid-row: 2 / span 2;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin: 0;
+    padding: 0 0 0 14px;
+    border-top: 0;
+    border-left: 1px solid var(--ptp-line-soft);
+  }
+  [data-pitwall-test-premium] [data-pitwall-slot="own-car"] > dl dt {
+    font-size: 14px;
+    line-height: 1.2;
+  }
+  [data-pitwall-test-premium] [data-pitwall-slot="own-car"] > dl dd {
+    margin-top: 2px;
+    font-size: 15px;
+    line-height: 1.2;
+  }
+  [data-pitwall-test-premium] [data-pitwall-slot="own-car"] > dl > div + div {
+    padding-left: 0;
+    border-left: 1px solid var(--ptp-line-soft);
+  }
+
+  /* One measured pit stop is a number and its scope, not a full-width band. */
+}
+
+@media (min-width: 1081px) {
+  [data-pitwall-test-premium] .ptp-pit-benchmark > section {
+    display: grid;
+    grid-template-columns: 190px minmax(0, 1fr);
+    align-items: center;
+    padding: 0;
+  }
+  [data-pitwall-test-premium] .ptp-pit-benchmark > section > header {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1px;
+    min-height: 0;
+    padding: 6px 14px;
+    border-right: 1px solid var(--ptp-line-soft);
+    border-bottom: 0;
+  }
+  [data-pitwall-test-premium] .ptp-pit-benchmark > section > header h3 {
+    font-size: 15px;
+    line-height: 1.25;
+  }
+  [data-pitwall-test-premium] .ptp-pit-benchmark > section > div {
+    min-width: 0;
+    padding: 6px 14px;
+  }
+  [data-pitwall-test-premium] .ptp-pit-benchmark [data-pit-visit] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 16px;
+  }
+  [data-pitwall-test-premium] .ptp-pit-benchmark [data-pit-visit] > p:nth-child(1) {
+    grid-row: 1 / span 3;
+    margin: 0;
+    font-size: 22px;
+    line-height: 1;
+  }
+  [data-pitwall-test-premium] .ptp-pit-benchmark [data-pit-visit] > p:nth-child(2),
+  [data-pitwall-test-premium] .ptp-pit-benchmark [data-pit-visit] > p:nth-child(3) {
+    grid-column: 2;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.3;
+  }
+  [data-pitwall-test-premium] .ptp-pit-benchmark [data-pit-benchmark-empty] > p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.3;
+  }
+}
+
+/* The lap delta label fits on one line where there is room. Position labels
+   may still wrap: forcing five of them onto one line made "Verstreken sessie"
+   run into "Resttijd". */
+@media (min-width: 1500px) {
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi] {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.05fr) minmax(0, 1.6fr);
+  }
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group="rondetijd"] > div > div > p:first-child {
+    white-space: nowrap;
+  }
+}
+
+/* ── Focus: same hierarchy, smaller chrome ─────────────────────────────── */
+
+[data-ptp-focus="true"] .ptp-masthead {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 16px;
+  padding: 5px 12px;
+}
+
+[data-ptp-focus="true"] .ptp-mast-brand {
+  display: none;
+}
+
+[data-ptp-focus="true"] .ptp-mast-title h1.ptp-mast-device {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+[data-ptp-focus="true"] .ptp-mast-track {
+  font-size: 21px;
+  line-height: 1.05;
+}
+
+[data-ptp-focus="true"] .ptp-mast-side .ptp-meta {
+  gap: 1px 12px;
+}
+
+[data-ptp-focus="true"] .ptp-timing-head {
+  min-height: 40px;
+  padding: 4px 10px;
+}
+
+[data-ptp-focus="true"] .ptp-timing-title h2 {
+  font-size: 17px;
+}
+
+[data-ptp-focus="true"] .ptp-timing-head .ptp-timing-tabs > button {
+  min-height: 28px;
+}
+
+[data-ptp-focus="true"] .ptp-timing-legend {
+  padding-block: 2px;
+}
+
+[data-ptp-focus="true"] .ptp-timing-table thead th {
+  height: 32px;
+  font-size: 14px;
+}
+
+[data-ptp-focus="true"] .ptp-timing-table tbody td {
+  height: 46px;
+}
+
+[data-ptp-focus="true"] .ptp-timing-table .ptp-own-pinned > tr > td {
+  top: 32px;
+}
+
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] {
+  display: block;
+  padding: 6px 10px 7px;
+}
+
+[data-ptp-focus="true"] .ptp-pit-benchmark > section {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px 5px;
+}
+
+[data-ptp-focus="true"] .ptp-pit-benchmark > section > header {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+  border-right: 0;
+  border-bottom: 0;
+  padding: 0;
+}
+
+[data-ptp-focus="true"] .ptp-pit-benchmark > section > div {
+  padding: 0;
+}
+
+/* ── Responsive: wrap the header, never squeeze the values ─────────────── */
+
+@media (max-width: 1500px) {
+  [data-pitwall-test-premium] .ptp-masthead {
+    grid-template-columns: 126px minmax(0, 1fr);
+  }
+  [data-pitwall-test-premium] .ptp-mast-side {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    padding-top: 4px;
+    border-top: 1px solid var(--ptp-line-soft);
+  }
+  [data-pitwall-test-premium] .ptp-mast-side .ptp-meta {
+    justify-content: flex-start;
+  }
+  [data-ptp-focus="true"] .ptp-masthead {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  [data-ptp-focus="true"] .ptp-mast-side {
+    grid-column: 1;
+    flex-wrap: wrap;
+    padding-top: 2px;
+  }
+}
+
+@media (max-width: 1100px) {
+  [data-pitwall-test-premium] .ptp-mast-track {
+    font-size: 23px;
+  }
+  [data-pitwall-test-premium] .ptp-timing-head .ptp-timing-tabs {
+    order: 3;
+    margin-left: 0;
+  }
+  [data-pitwall-test-premium] .ptp-timing-head .ptp-timing-actions {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group="rondetijd"] > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 4px;
+  }
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group="rondetijd"] > div > div {
+    padding-inline: 0;
+    border-left: 0;
+  }
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group="positie"] > div {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 10px;
+    margin-top: 6px;
+  }
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group="positie"] > div > div {
+    padding-inline: 0;
+    border-left: 0;
+  }
+  [data-pitwall-test-premium] .ptp-masthead {
+    grid-template-columns: 1fr;
+    gap: 5px;
+    padding: 8px 10px;
+  }
+  [data-pitwall-test-premium] .ptp-mast-brand {
+    flex-direction: row;
+    align-items: center;
+    align-self: auto;
+    padding: 0 0 4px;
+    border-right: 0;
+    border-bottom: 1px solid var(--ptp-line-soft);
+  }
+  [data-pitwall-test-premium] .ptp-mast-track {
+    font-size: 21px;
+  }
+  [data-pitwall-test-premium] .ptp-mast-side {
+    flex-direction: column;
+    align-items: flex-start;
+    padding-top: 3px;
+  }
+  [data-pitwall-test-premium] .ptp-mast-side .ptp-meta {
+    justify-content: flex-start;
+  }
+  [data-pitwall-test-premium] .ptp-timing-title h2 {
+    font-size: 18px;
+  }
+  [data-pitwall-test-premium] .ptp-timing-head {
+    gap: 4px 10px;
+  }
+  [data-pitwall-test-premium] .ptp-timing-head .ptp-timing-tabs {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
+  [data-pitwall-test-premium] .ptp-timing-head .ptp-timing-actions {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 430px) {
+  /* Gap and Auto are still in each row's sr-only summary at this width. */
+  [data-pitwall-test-premium] .ptp-mast-device {
+    font-size: 14px;
+  }
+  [data-pitwall-test-premium] .ptp-timing-title {
+    width: 100%;
+  }
+  [data-pitwall-test-premium] .ptp-timing-head .ptp-timing-actions {
+    margin-left: 0;
+  }
+}

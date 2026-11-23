@@ -1,5 +1,13 @@
 # Pitwall-look — Vincents ontwerp in de bestaande pitwall
 
+## Premium clean-hiërarchie (23 november, lokaal)
+
+Nieuwe ronde op `9ac05c24`: race-eerst kop, één timingtitel in plaats van
+kicker+heading+tab, gap vóór de rondetijden, compacte laatste-stop en
+ingekorte hulpregels. Geen query-, route- of rechtenwijziging; klassiek blijft
+klassiek. Bewijs, bronnen en grenzen:
+`evidence/premium-clean-20261123/README.md`.
+
 ## PACE-bouwronde (lokaal, niet uitgerold)
 
 Actueel PACE-contract: `../contracts/pace-capture-v1.md`. Bewijs: `pace-bewijs.md`.
