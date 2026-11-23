@@ -39,10 +39,32 @@ describe("premium pitwall leesbaarheid", () => {
     expect(layer).toBeGreaterThan(focus);
   });
 
-  it("zet geen tekst meer onder 11 px in de leesbaarheidslaag", () => {
+  it("zet geen tekst meer onder 14 px in de leesbaarheidslaag", () => {
     const sizes = [...readability.matchAll(/font-size:\s*([\d.]+)px/g)].map((match) => Number(match[1]));
     expect(sizes.length).toBeGreaterThan(40);
-    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(11);
+    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(14);
+  });
+
+  it("houdt de sleutellabels op 15 px en de coureursnaam op 15,5 px", () => {
+    expect(readability).toMatch(/--ptp-read-label:\s*14px/);
+    expect(readability).toMatch(/--ptp-read-key:\s*15px/);
+    expect(readability).toMatch(/\.ptp-timing-table thead th[^}]*font-size:\s*15px/);
+    expect(readability).toMatch(/\.ptp-pit\s*\{[^}]*font-size:\s*14px/);
+    expect(readability).toMatch(/\.ptp-col-sector\s*\{[^}]*font-size:\s*14px/);
+    // Coureursnamen waren al leesbaar en blijven precies even groot.
+    expect(readability).toMatch(/\.ptp-driver-name\s*\{[^}]*font-size:\s*15\.5px/);
+  });
+
+  it("geeft brandstof, banden en kaartnotities dezelfde 14–15 px-ondergrens", () => {
+    expect(readability).toMatch(/\[data-pitwall-slot="fuel"\] p\.text-\\\[12px\\\][^}]*font-size:\s*15px/);
+    expect(readability).toMatch(/\[data-pitwall-tyre-corner\] > p:first-child[^}]*font-size:\s*15px/);
+    expect(readability).toMatch(/:is\(\.text-\\\[8px\\\], \.text-\\\[9px\\\][^}]*font-size:\s*14px/);
+  });
+
+  it("geeft de bredere timingkolommen en 1280-KPI's een eigen layout", () => {
+    expect(readability).toMatch(/col\.ptp-col-driver\s*\{\s*width:\s*200px/);
+    expect(readability).toMatch(/col\.ptp-col-gap\s*\{\s*width:\s*106px/);
+    expect(readability).toMatch(/@media \(min-width: 1081px\) and \(max-width: 1399px\)[\s\S]*?grid-template-columns:\s*minmax\(0, 4fr\) minmax\(0, 6fr\) minmax\(0, 8fr\)/);
   });
 
   it("houdt de gedempte kleuren boven 4,5:1 op de donkerste panelen", () => {
@@ -54,8 +76,8 @@ describe("premium pitwall leesbaarheid", () => {
   });
 
   it("geeft de focusrij een minimum in plaats van een vaste krimpende hoogte", () => {
-    expect(readability).toMatch(/grid-template-rows:[^;]*minmax\(310px, 1fr\)[^;]*minmax\(230px, 18dvh\)/);
-    expect(readability).toMatch(/min-height:\s*230px/);
+    expect(readability).toMatch(/grid-template-rows:[^;]*minmax\(310px, 1fr\)[^;]*minmax\(300px, 22dvh\)/);
+    expect(readability).toMatch(/min-height:\s*300px/);
     expect(readability).toMatch(/grid-auto-rows:\s*minmax\(0, 1fr\)/);
   });
 
@@ -76,15 +98,15 @@ describe("premium pitwall leesbaarheid", () => {
     expect(readability).toMatch(/\.ptp-meta dd\s*\{[^}]*max-width:\s*280px/);
   });
 
-  it("houdt de vaste paneelrij hoog genoeg voor de Pace-waarden", () => {
-    expect(readability).toMatch(/grid-auto-rows:\s*272px/);
+  it("houdt de paneelrij hoog genoeg voor 14–15 px-kaarttekst", () => {
+    expect(readability).toMatch(/grid-auto-rows:\s*minmax\(320px, auto\)/);
   });
 
   it("houdt de deelstrook in focus bereikbaar maar compact", () => {
     const personal = read("src/pages/PersonalPitwallPage.tsx");
     // Bestaand contract: de deelbediening blijft ook in focus in dezelfde boom.
     expect(personal).toMatch(/<ShareBar/);
-    expect(readability).toMatch(/\.pp-share \.pp-share-state\s*\{[^}]*font-size:\s*11\.5px/);
+    expect(readability).toMatch(/\.pp-share \.pp-share-state\s*\{[^}]*font-size:\s*14px/);
     expect(readability).toMatch(/\.pp-share \.pp-share-primary:disabled\s*\{[^}]*color:\s*#f4e7db/);
     // Focus: één bedieningsregel, kop en knop blijven zichtbaar.
     expect(readability).toMatch(/\[data-ptp-focus="true"\]\[data-pitwall-personal\] \.pp-share\s*\{[^}]*display:\s*flex/);

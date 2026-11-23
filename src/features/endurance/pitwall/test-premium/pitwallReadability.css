@@ -5,8 +5,8 @@
    6,5–10 px. Dat is op monitordistance niet leesbaar en de focusweergave
    compenseerde met nog kleinere letters in plaats van met scrollen.
 
-   Deze laag zet daarom een ondergrens van 11–12 px op labels/metadata, 13–14 px
-   op wedstrijdwaarden en houdt de hiërarchie (labels klein, waarden groot).
+   Deze laag zet daarom een ondergrens van 14 px op labels/metadata en 15 px op
+   sleutellabels, en houdt de hiërarchie (labels klein, waarden groot).
    Tegelijk gaan de gedempte kleuren naar ≥4,5:1 op de donkere panelen en krijgt
    de focusweergave een minimale hoogte per rij; liever scrollen dan krimpen.
    Uitsluitend presentatie: geen query, sortering, autorisatie of berekening. */
@@ -37,11 +37,11 @@
    de uitgeschakelde knop op 2,1:1. De strook is geen onderdeel van de
    premiumkaart, maar staat wel op dezelfde pagina en telt mee voor de leesbaarheid. */
 [data-pitwall-personal] .pp-share .pp-share-state {
-  font-size: 11.5px;
+  font-size: 14px;
   color: #9aa9b8;
 }
 [data-pitwall-personal] .pp-share :is(.pp-share-primary, .pp-share-secondary, .pp-share-stop) {
-  font-size: 12px;
+  font-size: 14px;
 }
 [data-pitwall-personal] .pp-share .pp-share-primary:disabled {
   opacity: 1;
@@ -50,11 +50,11 @@
   color: #f4e7db;
 }
 [data-pitwall-personal] .pp-viewer-strip .pp-viewer-focus {
-  font-size: 11.5px;
+  font-size: 14px;
 }
 [data-pitwall-personal] .pp-share .pp-share-note {
   color: #9aa9b8;
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 /* In focus is de deelstrook een smalle bedieningsregel, geen setupblok. De
@@ -91,7 +91,7 @@
 [data-ptp-focus="true"][data-pitwall-personal] .pp-share :is(.pp-share-secondary, .pp-share-stop) {
   min-height: 28px;
   padding: 3px 9px;
-  font-size: 11.5px;
+  font-size: 14px;
 }
 
 /* De metarij mag krimpen noch tekst afkappen zolang er breedte is; hij wikkelt
@@ -105,393 +105,393 @@
 
 /* Tailwind-utilities in de panelen/kaarten die onder de leesgrens zaten. */
 [data-pitwall-test-premium] :is(.text-\[8px\], .text-\[9px\]) {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] :is(.text-\[10px\], .text-\[10\.5px\]) {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .text-\[11px\] {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.35;
 }
 
 /* ── Opgetilde basistypografie (gegenereerd uit de bestaande regels) ────── */
 
-/* 22 regels die te klein stonden -> 11px */
+/* 22 regels die te klein stonden -> 14px */
 [data-pitwall-test-premium] .ptp-dock-controls .ptp-controls-label {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-brandline {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-status {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-readonly {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-count {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-focus-label {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-class-count {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-move {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-you {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-pit {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-sector-lap-mark {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 .ptp-focus-count {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-status {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-readonly {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-meta dt {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > p:first-child {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:first-child {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(3) {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-tyre-fuel] > p:first-child {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-ptp-circuit] [data-ptp-lap-labels] {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-pitwall-slot="own-car"] > p:nth-child(1) {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-pitwall-slot="own-car"] dl dt {
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
 }
-/* 49 regels die te klein stonden -> 11.5px */
+/* 49 regels die te klein stonden -> 14px */
 [data-pitwall-test-premium] .ptp-controls-label {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-dock-status {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-brand {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-kicker {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-meta dt {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > p:first-child {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:first-child {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(3) {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-tyre-fuel] > p:first-child {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] [data-pitwall-slot]:not([data-premium-timing]) > header > div > span {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-live-pill {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-ghost-button {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-timing-tabs > button, [data-pitwall-test-premium] .ptp-class-filter button {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-focus-number {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-focus-gap {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-timing-table thead th.ptp-col-gap {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-class-row th {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-col-num {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-sr {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-col-lap {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-col-gap {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-panels [aria-label="Pace-weergave"] button, [data-pitwall-test-premium] .ptp-panels [aria-label="Timing-weergave"] button {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-panels [data-pitwall-slot="pitstop"] button {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-more > summary {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-footnote {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-timing-legend {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-sector-lap-mark {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 .ptp-focus-state {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 .ptp-focus-btn {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-mast-sub {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-meta dd {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-binding-sentence] {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-ptp-circuit] [data-ptp-lap-badge] {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-pitwall-slot="own-car"] > p:nth-child(3) {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-timing-tabs > button, [data-ptp-focus="true"] .ptp-class-filter button {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-focus-value {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-timing-note {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header h3 {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="tyres"] [data-pitwall-tyre-corner] > p:nth-child(4) {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="pitstop"] button {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-more > summary {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-ptp-archive] h2 {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 .ptp-focus-brand {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 .ptp-focus-count {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-status {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-meta dt {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > p:first-child {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:first-child {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-focus-label {
-  font-size: 11.5px;
+  font-size: 14px;
   line-height: 1.3;
 }
-/* 22 regels die te klein stonden -> 12px */
+/* 22 regels die te klein stonden -> 14px */
 [data-pitwall-test-premium] .ptp-switch button {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-motion {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-override {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-mast-sub {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-meta dd {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content > p:nth-child(2) {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-binding-sentence] {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] [data-pitwall-slot]:not([data-premium-timing]) > header h3 {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-focus-value {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-timing-table thead th {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-driver-meta {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-timing-note {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 .ptp-focus-brand {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 .ptp-focus-state.is-alert {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > p:nth-of-type(2) {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-compare li {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-ptp-archive] li span:last-child {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 .ptp-focus-btn {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-meta dd {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-focus-value {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header h3 {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 [data-pitwall-test-premium] [data-ptp-circuit] [data-ptp-lap-labels] {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 
@@ -503,8 +503,8 @@
 }
 [data-pitwall-test-premium] .ptp-timing-table thead th {
   height: 32px;
-  font-size: 11.5px;
-  line-height: 15px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 [data-pitwall-test-premium] .ptp-timing-table tbody td {
   height: 46px;
@@ -546,13 +546,13 @@
   font-size: 14px;
 }
 [data-pitwall-test-premium] .ptp-col-sector {
-  font-size: 13px;
+  font-size: 14px;
 }
 [data-pitwall-test-premium] .ptp-col-gap {
-  font-size: 13px;
+  font-size: 14px;
 }
 [data-pitwall-test-premium] .ptp-col-lap {
-  font-size: 12px;
+  font-size: 14px;
 }
 [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-driver {
   width: 190px;
@@ -573,33 +573,33 @@
   line-height: 24px;
 }
 [data-ptp-focus="true"] .ptp-mast-sub {
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-status {
-  font-size: 11px;
-  line-height: 15px;
+  font-size: 14px;
+  line-height: 1.3;
   padding: 1px 6px;
 }
 [data-ptp-focus="true"] .ptp-readonly {
-  font-size: 11px;
-  line-height: 15px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-meta dt {
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-meta dd {
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > p:first-child {
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:first-child {
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(2) {
   font-size: 24px;
@@ -609,33 +609,33 @@
   font-size: 17px;
 }
 [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(3) {
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 [data-ptp-focus="true"] [data-pitwall-decision-band] [role="status"] {
   font-size: 16px;
   line-height: 20px;
 }
 [data-ptp-focus="true"] .ptp-focus-label {
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-focus-pos {
   font-size: 14px;
 }
 [data-ptp-focus="true"] .ptp-focus-value {
-  font-size: 13px;
-  line-height: 16px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-focus-number {
-  font-size: 12px;
+  font-size: 14px;
 }
 [data-ptp-focus="true"] .ptp-focus-gap {
-  font-size: 13px;
+  font-size: 14px;
 }
 [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header h3 {
-  font-size: 13px;
-  line-height: 17px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header {
   min-height: 34px;
@@ -650,7 +650,7 @@
   margin-top: 6px;
 }
 [data-ptp-focus="true"] .ptp-panel-head h2 {
-  font-size: 13px;
+  font-size: 14px;
 }
 [data-ptp-focus="true"] .ptp-panel-head {
   min-height: 38px;
@@ -661,21 +661,21 @@
 [data-ptp-focus="true"] .ptp-timing-tabs > button,
 [data-ptp-focus="true"] .ptp-class-filter button {
   min-height: 28px;
-  font-size: 11.5px;
+  font-size: 14px;
 }
 [data-ptp-focus="true"] .ptp-timing-table tbody td {
   height: 48px;
 }
 [data-ptp-focus="true"] .ptp-timing-table thead th {
   height: 34px;
-  font-size: 11.5px;
+  font-size: 14px;
 }
 [data-ptp-focus="true"] .ptp-timing-table .ptp-own-pinned > tr > td {
   top: 34px;
 }
 [data-ptp-focus="true"] .ptp-timing-note {
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 14px;
+  line-height: 1.3;
   padding-block: 5px;
 }
 
@@ -710,7 +710,7 @@
    inhoud passen; de twee eerste blijven de vrije ruimte verdelen. */
 @media (min-width: 1081px) {
   [data-pitwall-test-premium] .ptp-meta {
-    grid-template-columns: minmax(180px, 2fr) minmax(90px, 1fr) 92px 116px 120px 190px;
+    grid-template-columns: minmax(180px, 2fr) minmax(110px, 1fr) 104px 132px 140px 190px;
   }
 }
 
@@ -798,5 +798,316 @@
   }
   [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-car {
     width: 140px;
+  }
+}
+
+/* ── Grotere leesmaat op 2560×1440 en lager (23 november) ────────────────
+   De eerste leesbaarheidslaag zette de ondergrens op 11–13 px. Op een
+   2560×1440-monitor op monitordistance is dat nog te klein voor secundaire
+   informatie: kolomkoppen, sectortijden, de PIT-badge, brandstof/banden en
+   de toelichting onder een kaart. Die staan nu op 14 px; de belangrijkste
+   labels (kaarttitels, kolomkoppen, veldnamen) op 15 px. Coureursnamen
+   blijven 15,5 px: die waren al leesbaar en houden hun hiërarchie.
+   De tabel krijgt bredere kolommen en hogere rijen in plaats van kleinere
+   letters; de paneelrij groeit mee en de focuscontainer scrolt. */
+
+[data-pitwall-test-premium] {
+  --ptp-read-label: 14px;
+  --ptp-read-meta: 14px;
+  --ptp-read-cell: 15px;
+  --ptp-read-key: 15px;
+}
+
+/* Tailwind-utilities in de panelen/kaarten: één ondergrens van 14 px. */
+[data-pitwall-test-premium] :is(.text-\[8px\], .text-\[9px\], .text-\[10px\], .text-\[10\.5px\], .text-\[11px\], .text-\[12px\]) {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Sleutellabels: één stap groter dan de secundaire tekst. */
+[data-pitwall-test-premium] .ptp-panel-head h2,
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot] > header h3,
+[data-pitwall-test-premium] [data-pitwall-slot]:not([data-premium-timing]) > header h3,
+[data-pitwall-test-premium] .ptp-timing-table thead th,
+[data-pitwall-test-premium] .ptp-meta dt,
+[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > p:first-child,
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot="fuel"] p.text-\[12px\],
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot="tyres"] [data-pitwall-tyre-corner] > p:first-child {
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+/* Metatekst in de kop, de tabellen en de kaarten. */
+[data-pitwall-test-premium] .ptp-meta dd,
+[data-pitwall-test-premium] .ptp-mast-sub,
+[data-pitwall-test-premium] .ptp-status,
+[data-pitwall-test-premium] .ptp-readonly,
+[data-pitwall-test-premium] .ptp-kicker,
+[data-pitwall-test-premium] .ptp-timing-note,
+[data-pitwall-test-premium] .ptp-footnote,
+[data-pitwall-test-premium] .ptp-timing-legend,
+[data-pitwall-test-premium] .ptp-team,
+[data-pitwall-test-premium] .ptp-car-name,
+[data-pitwall-test-premium] .ptp-driver-meta,
+[data-pitwall-test-premium] .ptp-you,
+[data-pitwall-test-premium] .ptp-pit,
+[data-pitwall-test-premium] .ptp-sector-lap-mark,
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot] > header > div > span,
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot="tyres"] [data-pitwall-tyre-corner] > p:last-child {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+/* De tijdkolommen blijven de wedstrijdwaarden dragen. */
+[data-pitwall-test-premium] .ptp-timing-table {
+  font-size: 15px;
+  line-height: 22px;
+}
+[data-pitwall-test-premium] .ptp-timing-table thead th {
+  height: 38px;
+  padding: 6px 6px;
+  font-size: 15px;
+  line-height: 18px;
+}
+[data-pitwall-test-premium] .ptp-timing-table tbody td {
+  height: 52px;
+  padding-block: 7px;
+}
+[data-pitwall-test-premium] .ptp-col-time {
+  font-size: 15px;
+  line-height: 20px;
+}
+[data-pitwall-test-premium] .ptp-col-sector {
+  font-size: 14px;
+  line-height: 18px;
+}
+[data-pitwall-test-premium] .ptp-col-gap {
+  font-size: 14px;
+  line-height: 18px;
+}
+[data-pitwall-test-premium] .ptp-col-lap {
+  font-size: 14px;
+  line-height: 18px;
+}
+[data-pitwall-test-premium] .ptp-driver-name {
+  font-size: 15.5px;
+  line-height: 20px;
+}
+[data-pitwall-test-premium] .ptp-pit {
+  padding: 2px 6px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-pos { width: 52px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-num { width: 40px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-driver { width: 200px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-car { width: 172px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-time { width: 84px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-sector {
+  width: clamp(84px, calc(420px / var(--ptp-sector-count, 1)), 100px);
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-lap { width: 50px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-gap { width: 106px; }
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-pit { width: 52px; }
+[data-pitwall-test-premium] .ptp-timing-table .ptp-own-pinned > tr > td { top: 38px; }
+[data-pitwall-test-premium] .ptp-timing-table thead th.ptp-col-gap { width: 106px; }
+[data-pitwall-test-premium] .ptp-timing-table thead th.ptp-col-pit { width: 52px; }
+
+/* De losse timingbalk boven de tabel (Voor/Jij/Achter) groeit mee. */
+[data-pitwall-test-premium] .ptp-focus-label {
+  font-size: 14px;
+}
+[data-pitwall-test-premium] .ptp-focus-name {
+  font-size: 14px;
+}
+[data-pitwall-test-premium] .ptp-focus-gap {
+  font-size: 14px;
+}
+[data-pitwall-test-premium] .ptp-focus-number {
+  font-size: 14px;
+}
+[data-pitwall-test-premium] .ptp-focus-pos {
+  font-size: 15px;
+}
+
+/* Kaarten: titel, meta en body krijgen ruimte; de rij groeit mee. */
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot] > header {
+  min-height: 38px;
+  padding: 6px 10px;
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot] > div {
+  padding: 8px 10px 9px;
+}
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot="tyres"] [data-pitwall-tyre-corner] {
+  padding: 5px 7px;
+}
+[data-pitwall-test-premium] .ptp-panels [data-pitwall-slot="pitstop"] button {
+  min-height: 32px;
+  font-size: 14px;
+}
+[data-pitwall-test-premium] .ptp-more > summary {
+  min-height: 34px;
+  font-size: 14px;
+}
+[data-pitwall-test-premium] .ptp-timing-tabs > button,
+[data-pitwall-test-premium] .ptp-class-filter button {
+  min-height: 32px;
+  font-size: 14px;
+}
+[data-pitwall-test-premium] .ptp-ghost-button,
+[data-pitwall-test-premium] .ptp-live-pill {
+  min-height: 30px;
+  font-size: 14px;
+}
+[data-pitwall-test-premium] .ptp-timing-tabs {
+  min-height: 36px;
+}
+
+/* Buiten focus: de vaste paneelrij was 272 px; met 14–15 px tekst past dat
+   niet meer zonder de onderste regel weg te knippen. Laat de rij op inhoud
+   groeien, met 320 px als ondergrens. */
+@media (min-width: 1081px) {
+  [data-pitwall-test-premium] .ptp-panels {
+    grid-auto-rows: minmax(320px, auto);
+  }
+}
+
+/* Focus op 2560×1440 en lager: grotere paneelrij, de rest scrollt. */
+@media (min-height: 901px) {
+  [data-ptp-focus="true"] .ptp-root {
+    grid-template-rows: auto auto auto auto minmax(310px, 1fr) minmax(300px, 22dvh) auto;
+  }
+  [data-ptp-focus="true"] .ptp-panels {
+    min-height: 300px;
+  }
+  [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header {
+    min-height: 42px;
+    padding: 7px 10px;
+  }
+  [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header h3 {
+    font-size: 15px;
+    line-height: 19px;
+  }
+  [data-ptp-focus="true"] .ptp-panel-head {
+    min-height: 42px;
+  }
+  [data-ptp-focus="true"] .ptp-panel-head h2 {
+    font-size: 15px;
+  }
+}
+
+/* 1280×720 (200% zoom op 2560): de panelen wikkelen naar drie kolommen en
+   krijgen genoeg hoogte voor de grotere tekst; de focus-shell scrolt. */
+@media (max-width: 1400px) {
+  [data-ptp-focus="true"] .ptp-panels {
+    grid-auto-rows: minmax(250px, auto);
+  }
+  [data-ptp-focus="true"] .ptp-panels .ptp-panel-wrap,
+  [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] {
+    min-height: 250px;
+  }
+}
+
+@media (max-width: 1080px) {
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-driver { width: 180px; }
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-car { width: 150px; }
+}
+
+/* De focuslaag zette de circuitnaam en de eigen-auto-waarden nog op 12 px.
+   Dat zijn leesbare labels/waarden, geen decor; ook die gaan naar 14–15 px. */
+[data-ptp-focus="true"] [data-ptp-circuit] [data-pitwall-slot="trackmap"] p.font-heading {
+  font-size: 15px;
+  line-height: 19px;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] dl dt {
+  font-size: 14px;
+  line-height: 18px;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] dl dd {
+  font-size: 15px;
+  line-height: 19px;
+}
+
+/* Buiten focus blijven de apparaatdock en de vergelijkingslijst nog op 11 px
+   staan; ook dat is secundaire informatie op dezelfde pagina. */
+[data-pitwall-test-premium] .ptp-dock-head h2,
+[data-pitwall-test-premium] .ptp-dock-head .ptp-count,
+[data-pitwall-test-premium] .ptp-device-name,
+[data-pitwall-test-premium] .ptp-device-meta {
+  font-size: 14px;
+  line-height: 18px;
+}
+[data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare li {
+  font-size: 14px;
+  line-height: 19px;
+}
+
+/* De vergelijkingslijst gebruikte een vaste labelbreedte van 48 px; bij 14 px
+   plakte "banden" tegen "onbekend". Geef het label echte ruimte. */
+[data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare li > span.w-12 {
+  width: 76px;
+  padding-right: 8px;
+}
+
+/* De eigen-auto-kaart zette de drie tijden naast de identiteit. Bij 14–15 px
+   houdt de identiteit dan nog maar ~100 px over en wikkelt "EIGEN AUTO #17 ·
+   R48" over drie regels. In focus gaan de tijden onder de identiteit staan. */
+@media (min-width: 1081px) {
+  [data-ptp-focus="true"] [data-pitwall-slot="own-car"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+  }
+  [data-ptp-focus="true"] [data-pitwall-slot="own-car"] > p:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  [data-ptp-focus="true"] [data-pitwall-slot="own-car"] > p:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  [data-ptp-focus="true"] [data-pitwall-slot="own-car"] > p:nth-child(3) {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  [data-ptp-focus="true"] [data-pitwall-slot="own-car"] dl {
+    display: grid;
+    grid-column: 1;
+    grid-row: 4;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--ptp-line-soft);
+  }
+}
+
+/* De apparaatnaam paste bij 11 px in 150 px; bij 14 px is 196 px nodig.
+   De dock is horizontaal scrollbaar, dus breder mag. */
+[data-pitwall-test-premium] .ptp-device {
+  flex-basis: 196px;
+  max-width: 230px;
+}
+
+/* Op 1081–1399 px pasten de drie KPI-groepen niet meer naast elkaar met
+   26px-waarden: de Rondetijd-kaart kreeg 341 px. De sectorstrip levert
+   breedte in en de waarden gaan naar 22 px; de labels blijven 14 px en de
+   sector-kop wikkelt in plaats van af te kappen. */
+@media (min-width: 1081px) and (max-width: 1399px) {
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi] {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 6fr) minmax(0, 8fr);
+  }
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > p:first-child {
+    white-space: normal;
+    line-height: 1.25;
+  }
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(2),
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group].pitwall-many-sectors > div > div > p:nth-child(2) {
+    font-size: 22px;
+  }
+  /* De vier positiecellen krijgen iets meer lucht zonder de waarde te raken. */
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group="positie"] > div > div {
+    padding-inline: 6px;
   }
 }
