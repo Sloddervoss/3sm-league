@@ -1,5 +1,6 @@
 import { fitFuelCandidate, type FuelExample } from "../../src/features/endurance/pitwall/learning/fuelCandidate.ts";
 import { qualifyFuelRevision, type VisibleFuelRevision, type QualifiedFuelObservation, type ProspectiveFuelForecast } from "../../src/features/endurance/pitwall/learning/fuelEvidence.ts";
+import { qualifyServerFacts, type ServerFuelFacts } from "../../src/features/endurance/pitwall/learning/serverEvidence.ts";
 export interface FuelDatabase {
   call<T>(name: string, args: unknown[]): Promise<T>;
 }
@@ -9,6 +10,7 @@ interface Window {
   forecasts: ProspectiveFuelForecast[];
   examples: FuelExample[];
   asOf: number;
+  minExamples?: number;
 }
 export interface CycleResult { jobs: number; materialized: number; observations: number; examples: number; candidates: number; retries: number }
 /** Actual bounded caller of the existing queue, causal adapter and fitted candidate. */
@@ -24,7 +26,15 @@ export async function runFuelCycle(db: FuelDatabase): Promise<CycleResult> {
         result.materialized++; continue;
       }
       const source = await db.call<VisibleFuelRevision | null>("fuel_worker_source", [job.job_id, job.lease_token]);
-      const observation = source ? qualifyFuelRevision(source) : null;
+      let observation = source ? qualifyFuelRevision(source) : null;
+      if (source && !observation) {
+        // The connector's local observation ledger never opened on any field
+        // device, so the lap summary arrives without an observation block.
+        // The restricted SQL function resolves the same facts from the stored
+        // lap row plus the identity written by the same persist transaction.
+        const facts = await db.call<ServerFuelFacts | null>("fuel_worker_server_source", [job.job_id, job.lease_token]);
+        observation = qualifyServerFacts(facts);
+      }
       if (observation) {
         const recorded = await db.call<boolean>("fuel_worker_record", [job.job_id, job.lease_token, observation]);
         if (!recorded) throw new Error("qualification_not_committed");
@@ -42,7 +52,7 @@ export async function runFuelCycle(db: FuelDatabase): Promise<CycleResult> {
         if (baseline.length >= 3) await db.call("fuel_worker_forecast", [observation.revision, baseline]);
         window = await db.call<Window | null>("fuel_worker_window", [observation.owner, observation.context]);
         if (!window) throw new Error("policy_changed");
-        if (window.examples.length >= 100) {
+        if (window.examples.length >= (window.minExamples ?? 100)) {
           const candidate = fitFuelCandidate(window.examples, window.asOf);
           if (candidate) {
             const saved = await db.call<string | null>("fuel_worker_save_model", [observation.owner, observation.context, candidate]);

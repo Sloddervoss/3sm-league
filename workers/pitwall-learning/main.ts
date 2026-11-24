@@ -1,6 +1,6 @@
 import { runFuelCycle, type FuelDatabase } from "./loop.ts";
 
-const operations = new Set(["claim_jobs", "materialize_capture_batch", "fuel_worker_source", "fuel_worker_record",
+const operations = new Set(["claim_jobs", "materialize_capture_batch", "fuel_worker_source", "fuel_worker_server_source", "fuel_worker_record",
   "fuel_worker_window", "fuel_worker_example", "fuel_worker_forecast", "fuel_worker_save_model", "fuel_worker_provision", "fuel_worker_retention", "finish_job"]);
 const psql = Deno.env.get("PSQL_BIN") ?? "/usr/lib/postgresql/15/bin/psql";
 if (Deno.env.get("PGUSER") !== "pitwall_learning_worker") throw new Error("Dedicated worker role required");
