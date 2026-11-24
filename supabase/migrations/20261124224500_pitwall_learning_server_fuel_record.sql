@@ -109,10 +109,17 @@ BEGIN
    WHERE source_revision_id = (s ->> 'id')::uuid
      AND qualified_data IS NULL;
 
+  -- Idempotent replay: a second pass over the same lap must succeed even though
+  -- an earlier pass stored an equal observation (litres are compared as
+  -- numbers, not as jsonb, so float noise from a different producer cannot turn
+  -- a valid re-run into a failed job).
   RETURN EXISTS (
     SELECT 1 FROM pitwall_learning.fuel_visibility
      WHERE source_revision_id = (s ->> 'id')::uuid
-       AND qualified_data = p_data);
+       AND qualified_data IS NOT NULL
+       AND qualified_data ->> 'revision' IS NOT DISTINCT FROM s ->> 'id'
+       AND (qualified_data ->> 'knownAt')::numeric IS NOT DISTINCT FROM (s ->> 'knownAt')::numeric
+       AND (qualified_data ->> 'usedLitres')::numeric = used);
 END
 $fn$;
 

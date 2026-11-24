@@ -51,6 +51,13 @@ const MAX_LAP_MILLISECONDS = 30 * 60 * 1000;
 const MAX_LABEL_DELAY_MILLISECONDS = 5 * 60 * 1000;
 const MIN_COVERAGE_FRACTION = 0.98;
 
+/**
+ * Fuels arrive with four decimals, so subtracting them can only produce float
+ * noise below that. Rounding keeps the stored observation byte-stable across
+ * re-runs, which is what makes the pinned, fill-once sink idempotent.
+ */
+const roundLitres = (v: number): number => Math.round(v * 10000) / 10000;
+
 export function qualifyServerFacts(facts: ServerFuelFacts | null): QualifiedFuelObservation | null {
   if (facts === null || typeof facts !== "object") return null;
   if (facts.allowed !== true || facts.superseded !== false) return null;
@@ -81,7 +88,7 @@ export function qualifyServerFacts(facts: ServerFuelFacts | null): QualifiedFuel
   if (endedAt > facts.knownAt) return null;
   if (facts.knownAt - endedAt > MAX_LABEL_DELAY_MILLISECONDS) return null;
 
-  const used = facts.fuelStartLitres - facts.fuelEndLitres;
+  const used = roundLitres(facts.fuelStartLitres - facts.fuelEndLitres);
   if (!Number.isFinite(used) || used < 0.2 || used > 15) return null;
 
   const scope = {

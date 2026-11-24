@@ -49,6 +49,14 @@ describe("qualifyServerFacts", () => {
     expect(qualifyServerFacts(withFacts({ superseded: true }))).toBeNull();
   });
 
+  it("stores litres without float noise so a replay produces the same observation", () => {
+    // 35.8635 - 32.2479 is 3.6156000000000013 in IEEE-754; the sink compares
+    // litres as numbers, so the stored value must be the four-decimal fuel.
+    const observation = qualifyServerFacts(base);
+    expect(observation?.usedLitres).toBe(3.6156);
+    expect(qualifyServerFacts(withFacts({}))?.usedLitres).toBe(observation?.usedLitres);
+  });
+
   it("refuses an incomplete sample train", () => {
     expect(qualifyServerFacts(withFacts({ samples: 1 }))).toBeNull();
     expect(qualifyServerFacts(withFacts({ maxGapSeconds: 1.2 }))).toBeNull();
