@@ -27,6 +27,7 @@ export async function runFuelCycle(db: FuelDatabase): Promise<CycleResult> {
       }
       const source = await db.call<VisibleFuelRevision | null>("fuel_worker_source", [job.job_id, job.lease_token]);
       let observation = source ? qualifyFuelRevision(source) : null;
+      let serverDerived = false;
       if (source && !observation) {
         // The connector's local observation ledger never opened on any field
         // device, so the lap summary arrives without an observation block.
@@ -34,9 +35,12 @@ export async function runFuelCycle(db: FuelDatabase): Promise<CycleResult> {
         // lap row plus the identity written by the same persist transaction.
         const facts = await db.call<ServerFuelFacts | null>("fuel_worker_server_source", [job.job_id, job.lease_token]);
         observation = qualifyServerFacts(facts);
+        serverDerived = observation !== null;
       }
       if (observation) {
-        const recorded = await db.call<boolean>("fuel_worker_record", [job.job_id, job.lease_token, observation]);
+        // The client record function pins the observation block it validated;
+        // server-derived facts need the matching pin against their own source.
+        const recorded = await db.call<boolean>(serverDerived ? "fuel_worker_record_server" : "fuel_worker_record", [job.job_id, job.lease_token, observation]);
         if (!recorded) throw new Error("qualification_not_committed");
         result.observations++;
         let window = await db.call<Window | null>("fuel_worker_window", [observation.owner, observation.context]);
