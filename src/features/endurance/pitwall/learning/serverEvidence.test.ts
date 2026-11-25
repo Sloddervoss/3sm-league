@@ -64,7 +64,9 @@ describe("qualifyServerFacts", () => {
     expect(qualifyServerFacts(withFacts({ sessionType: "" }))).toBeNull();
     expect(qualifyServerFacts(withFacts({ sessionType: "Test" }))).toBeNull();
     expect(qualifyServerFacts(withFacts({ sessionType: "Offline Testing" }))).toBeNull();
-    expect(qualifyServerFacts(withFacts({ sessionType: "Practice" }))?.sessionType).toBe("Practice");
+    for (const sessionType of ["Practice", "Qualify", "Warmup", "Race-like", "unknown"]) {
+      expect(qualifyServerFacts(withFacts({ sessionType }))).toBeNull();
+    }
     expect(qualifyServerFacts(withFacts({ sessionType: "Race" }))?.sessionType).toBe("Race");
   });
 

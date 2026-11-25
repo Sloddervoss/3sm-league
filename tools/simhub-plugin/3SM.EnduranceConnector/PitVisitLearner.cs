@@ -6,7 +6,7 @@ namespace ThreeSM.EnduranceConnector
     /// <summary>
     /// Leert per circuit waar de pitstraat begint en eindigt, en hoe lang dat stuk
     /// baan op racetempo duurt (de "stretch"). Daarmee kan de server het echte
-    /// pitverlies uitrekenen — pitstraattijd plus stilstaan min stretch — in plaats
+    /// pitverlies uitrekenen — pitstraattijd min stretch — in plaats
     /// van een vaste aanname te doen.
     ///
     /// Zuiver rekenwerk: geen SimHub- of iRacing-types, geen tijd, geen I/O. De
@@ -95,6 +95,37 @@ namespace ThreeSM.EnduranceConnector
             _exit = null;
         }
 
+        private string _raceSessionKey;
+
+        public void Interrupt() { if (_car.Valid) _car = new CarState(); }
+
+        public PitVisitEvidence ObserveRace(string sessionType, string sessionKey, string carTrackKey,
+            double? sessionSeconds, double? lapDistance, double? speed, bool? onPitRoad)
+        {
+            var race = string.Equals(sessionType, "Race", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(sessionKey) && !string.IsNullOrEmpty(carTrackKey);
+            BeginTrack(carTrackKey);
+            var activeKey = race ? sessionKey : null;
+            if (!string.Equals(activeKey, _raceSessionKey, StringComparison.Ordinal))
+            {
+                _raceSessionKey = activeKey;
+                Interrupt();
+            }
+            if (!race || !sessionSeconds.HasValue || !lapDistance.HasValue || !speed.HasValue || !onPitRoad.HasValue)
+            {
+                Interrupt();
+                return null;
+            }
+            if (double.IsNaN(sessionSeconds.Value) || double.IsInfinity(sessionSeconds.Value)
+                || double.IsNaN(lapDistance.Value) || lapDistance < 0 || lapDistance > 1
+                || double.IsNaN(speed.Value) || double.IsInfinity(speed.Value) || speed < 0)
+            {
+                Interrupt();
+                return null;
+            }
+            return Update(sessionSeconds.Value, lapDistance.Value, speed.Value, onPitRoad.Value);
+        }
+
         /// <summary>
         /// Voert één meetlus uit. Retourneert het bewijsstuk van een zojuist
         /// afgerond pitbezoek, of null als er niets afgerond is.
@@ -116,6 +147,11 @@ namespace ThreeSM.EnduranceConnector
             }
 
             var elapsed = sessionTimeSeconds - car.SessionSeconds;
+            if (elapsed < 0 || elapsed > MaxJumpSeconds)
+            {
+                Interrupt();
+                return Update(sessionTimeSeconds, lapDistancePct, speedKph, onPitRoad);
+            }
             PitVisitEvidence finished = null;
 
             if (!car.InLane && onPitRoad)
@@ -137,6 +173,7 @@ namespace ThreeSM.EnduranceConnector
             }
             else if (car.InLane && !onPitRoad && car.Visit != null)
             {
+                if (DistancePct(lapDistancePct, car.PositionPct) > MaxJumpPct) car.Visit.Jumped = true;
                 finished = Finish(car.Visit, sessionTimeSeconds, lapDistancePct);
                 car.Visit = null;
             }

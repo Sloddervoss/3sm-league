@@ -1,31 +1,15 @@
 using System;
-using System.Collections.Generic;
 
 namespace ThreeSM.EnduranceConnector
 {
-    /// <summary>
-    /// Live sectorklok, afgeleid uit baanpositie — geen SDK-sectortijd.
-    ///
-    /// De SDK levert een sectortijd pas als de sector voorbij is. Deze klasse
-    /// houdt bij waar elke sector begint en rekent per tick uit hoe lang je al in
-    /// de huidige sector zit en hoe ver je erin bent. De grenzen komen bij
-    /// voorkeur uit de sessiedata (SectorStartPct, via ReadSectorStarts); pas als
-    /// die ontbreken worden ze geleerd uit het moment dat de sectorindex met
-    /// precies één opschuift.
-    ///
-    /// Poorten, in dezelfde geest als de pitvisit-leerling: alleen tellen als de
-    /// index en het aantal kloppen, de positie tussen 0 en 1 ligt, de auto niet in
-    /// de pitstraat staat en we nog op dezelfde ronde zijn. Anders is er geen
-    /// meting en blijft het blok leeg — er wordt niets geschat.
-    /// </summary>
+    // Layout positions include sector 1 at zero. A running time needs an observed
+    // entry on this lap; a current sector index alone is not an entry timestamp.
     public sealed class SectorProgressMonitor
     {
-        public const int MaxSectors = 12;
-        private const double MinPosition = 0.0;
-        private const double MaxPosition = 1.0;
-        private const double MaxLapSeconds = 1800.0;
+        public const int MaxSectors = 12; // existing optional V3 wire limit
+        private const double MaxGapSeconds = 2.0;
+        private const double MaxStep = 0.10;
 
-        /// <summary>Eén tick aan uitkomst. Null betekent: geen betrouwbare meting.</summary>
         public struct Progress
         {
             public int Index;
@@ -35,145 +19,123 @@ namespace ThreeSM.EnduranceConnector
             public bool Learned;
         }
 
-        private readonly Dictionary<string, Dictionary<int, double>> _boundaries =
-            new Dictionary<string, Dictionary<int, double>>(StringComparer.OrdinalIgnoreCase);
-
-        private string _trackKey;
+        private string _track;
+        private string _session;
+        private double[] _published;
+        private double?[] _learned = new double?[MaxSectors];
+        private int _count;
         private int _sector;
-        private int _lap = -1;
-        private double _sectorEntrySeconds;
-        private double _lastLapSeconds;
+        private int _lap;
+        private double _time;
+        private double _position;
+        private double? _entry;
 
-        /// <summary>
-        /// Grenzen uit de sessiedata overnemen voor deze baan. Levert de aanroeper
-        /// minder grenzen dan sectoren, dan worden alleen de bruikbare overgenomen
-        /// en leert de monitor de rest zelf.
-        /// </summary>
-        public void PublishBoundaries(string trackKey, double[] startsPct, int sectorCount)
+        public void BeginContext(string track, string session)
         {
-            if (string.IsNullOrEmpty(trackKey) || startsPct == null || startsPct.Length == 0) return;
-            if (sectorCount < 2 || sectorCount > MaxSectors) return;
-
-            Dictionary<int, double> map;
-            if (!_boundaries.TryGetValue(trackKey, out map))
-            {
-                map = new Dictionary<int, double>();
-                _boundaries[trackKey] = map;
-            }
-
-            // De publicatie bevat de grenzen ná sector 1: start[0] is het begin van
-            // sector 2. Sector 1 begint per definitie op 0 en staat er dus niet in.
-            for (var sector = 2; sector <= sectorCount; sector++)
-            {
-                var index = sector - 2;
-                if (index >= startsPct.Length) break;
-                var pct = startsPct[index];
-                if (double.IsNaN(pct) || pct <= MinPosition || pct >= MaxPosition) continue;
-                if (map.ContainsKey(sector)) continue;
-                map[sector] = pct;
-            }
+            if (string.Equals(track, _track, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(session, _session, StringComparison.Ordinal)) return;
+            _track = track;
+            _session = session;
+            _published = null;
+            Array.Clear(_learned, 0, _learned.Length);
+            _count = 0;
+            Interrupt();
         }
 
-        /// <summary>
-        /// Eén tick. Geeft null zodra één van de poorten niet rond is.
-        /// </summary>
-        public Progress? Update(
-            string trackKey,
-            double? lapSeconds,
-            double? positionPct,
-            int? sectorIndex,
-            int? sectorCount,
-            bool? onPitRoad,
-            int completedLaps)
+        public bool HasPublishedLayout { get { return _published != null; } }
+
+        public void PublishBoundaries(double[] starts)
         {
-            if (string.IsNullOrEmpty(trackKey)) return null;
-            if (sectorCount == null || sectorCount < 2 || sectorCount > MaxSectors) return null;
-            if (sectorIndex == null || sectorIndex < 1 || sectorIndex > sectorCount) return null;
-            if (lapSeconds == null || lapSeconds < 0 || lapSeconds > MaxLapSeconds) return null;
-            if (positionPct == null || positionPct < MinPosition || positionPct > MaxPosition) return null;
-            if (onPitRoad == true) return null;
+            if (starts == null || starts.Length < 2 || starts.Length > MaxSectors || starts[0] != 0) return;
+            for (var i = 1; i < starts.Length; i++)
+                if (!Finite(starts[i]) || starts[i] <= starts[i - 1] || starts[i] >= 1) return;
+            _published = (double[])starts.Clone();
+        }
 
-            var count = sectorCount.Value;
-            var sector = sectorIndex.Value;
-            var lap = lapSeconds.Value;
-            var position = positionPct.Value;
+        public void Interrupt()
+        {
+            _sector = 0;
+            _entry = null;
+        }
 
-            if (!string.Equals(trackKey, _trackKey, StringComparison.OrdinalIgnoreCase))
+        public Progress? Update(double? lapSeconds, double? position, int? sectorIndex,
+            int? sectorCount, bool? onPitRoad, int? completedLaps)
+        {
+            var count = _published != null ? _published.Length : sectorCount.GetValueOrDefault();
+            if (count < 2 || count > MaxSectors || count != _count)
             {
-                _trackKey = trackKey;
-                _sector = 0;
-                _lap = -1;
+                _count = count;
+                Array.Clear(_learned, 0, _learned.Length);
+                Interrupt();
+            }
+            if (string.IsNullOrEmpty(_track) || string.IsNullOrEmpty(_session) || onPitRoad != false
+                || count < 2 || count > MaxSectors || !sectorIndex.HasValue || sectorIndex < 1 || sectorIndex > count
+                || !completedLaps.HasValue || completedLaps < 0
+                || !lapSeconds.HasValue || !Finite(lapSeconds.Value) || lapSeconds < 0 || lapSeconds > 1800
+                || !position.HasValue || !Finite(position.Value) || position < 0 || position > 1)
+            {
+                Interrupt();
+                return null;
             }
 
-            Dictionary<int, double> map;
-            if (!_boundaries.TryGetValue(trackKey, out map))
-            {
-                map = new Dictionary<int, double>();
-                _boundaries[trackKey] = map;
-            }
+            var index = sectorIndex.Value;
+            var lap = completedLaps.Value;
+            var time = lapSeconds.Value;
+            var pct = position.Value;
+            var step = pct - _position;
+            var dt = time - _time;
 
-            if (sector != _sector || completedLaps != _lap)
+            if (_sector != 0 && lap == _lap + 1 && _sector == count && index == 1
+                && step < 0 && step + 1 <= MaxStep && time <= MaxGapSeconds && time < _time)
+                _entry = 0;
+            else if (_sector != 0 && lap == _lap && dt >= 0 && dt <= MaxGapSeconds && step >= 0 && step <= MaxStep)
             {
-                // Leren mag alleen bij een sprong van precies één sector op dezelfde
-                // ronde, met een positie midden op de baan. Anders is het een
-                // herstart, een reset of een pitpassage en leren we niets.
-                // Een gepubliceerde grens is leidend: die komt uit de sessiedata en
-                // wordt niet overschreven door een gelezen positie.
-                if (sector == _sector + 1 && completedLaps == _lap && sector > 1
-                    && position > MinPosition && position < MaxPosition
-                    && !map.ContainsKey(sector))
+                if (index != _sector)
                 {
-                    map[sector] = position;
+                    _entry = null;
+                    if (index == _sector + 1 && dt > 0 && step > 0)
+                    {
+                        var start = Boundary(index);
+                        if (!start.HasValue)
+                        {
+                            // The index transition is evidence; do not invent evenly spaced boundaries.
+                            var before = Boundary(index - 1);
+                            var after = Boundary(index + 1);
+                            if ((!before.HasValue || pct > before.Value) && (!after.HasValue || pct < after.Value))
+                                _learned[index - 1] = start = pct;
+                        }
+                        if (start.HasValue && _position <= start.Value && start.Value <= pct)
+                            _entry = _time + dt * ((start.Value - _position) / step);
+                    }
                 }
-                _sectorEntrySeconds = sector == 1 ? 0.0 : lap;
-                _sector = sector;
-                _lap = completedLaps;
             }
+            else _entry = null;
 
-            // Een nieuwere lap die terugvalt in laptijd betekent een nieuwe ronde:
-            // de intrede van deze sector hoort dan bij deze lap, niet bij de vorige.
-            if (lap < _lastLapSeconds && sector != 1)
-            {
-                _sectorEntrySeconds = 0.0;
-            }
-            _lastLapSeconds = lap;
+            _sector = index;
+            _lap = lap;
+            _time = time;
+            _position = pct;
+            if (!_entry.HasValue) return null;
 
-            var start = Boundary(map, sector, count);
-            var next = sector == count ? 1.0 : Boundary(map, sector + 1, count);
-            double progress;
-            if (sector == count && position < start)
-            {
-                progress = 1.0;
-            }
-            else if (next > start)
-            {
-                progress = (position - start) / (next - start);
-            }
-            else
-            {
-                progress = 0.0;
-            }
-
-            var learned = (sector == 1 || map.ContainsKey(sector))
-                && (sector == count || map.ContainsKey(sector + 1));
-
+            var from = Boundary(index);
+            var to = Boundary(index + 1);
+            var known = from.HasValue && to.HasValue && to.Value > from.Value;
             return new Progress
             {
-                Index = sector,
-                Count = count,
-                ElapsedSeconds = Math.Max(0.0, lap - _sectorEntrySeconds),
-                ProgressPct = Math.Max(0.0, Math.Min(100.0, progress * 100.0)),
-                Learned = learned
+                Index = index, Count = count, ElapsedSeconds = time - _entry.Value,
+                // A clock can run before the next boundary is known. The UI hides that bar.
+                ProgressPct = known ? Math.Max(0, Math.Min(100, (pct - from.Value) / (to.Value - from.Value) * 100)) : 0,
+                Learned = known
             };
         }
 
-        private static double Boundary(Dictionary<int, double> map, int sector, int count)
+        private double? Boundary(int index)
         {
-            if (sector <= 1) return 0.0;
-            double value;
-            if (map.TryGetValue(sector, out value)) return value;
-            // Geen grens bekend: gelijke delen, zodat de balk niet stilvalt.
-            return (double)(sector - 1) / (double)count;
+            if (index <= 1) return 0;
+            if (index > _count) return 1;
+            return _published != null ? (double?)_published[index - 1] : _learned[index - 1];
         }
+
+        private static bool Finite(double value) { return !double.IsNaN(value) && !double.IsInfinity(value); }
     }
 }

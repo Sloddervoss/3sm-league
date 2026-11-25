@@ -44,4 +44,17 @@ describe("normal endurance pitwall learning chain",()=>{
   mocks.fetch.mockImplementation(async()=>({...response(),telemetry:{received_at:new Date(Date.now()-60000).toISOString()}}));mount();
   await waitFor(()=>expect(mocks.fetch).toHaveBeenCalled());expect(mocks.learning).not.toHaveBeenCalled();
  });
+ it("shows a live sector from the normal RPC and hides it for stale telemetry",async()=>{
+  function withClock() {
+    const data=response();
+    return {...data,v3_normalized:{...data.v3_normalized, sectorProgress:{index:2,count:3,elapsedSeconds:14.7,progressPct:41.3,learned:true}}};
+  }
+  mocks.fetch.mockImplementation(async()=>withClock());
+  const view=mount();
+  expect(await screen.findByText("Sector 2/3")).toBeInTheDocument();
+  expect(view.container.querySelector('[data-sector-clock="2"]')).toHaveTextContent("14.7 s");
+  mocks.fetch.mockImplementation(async()=>({...withClock(), telemetry:{received_at:new Date(Date.now()-60000).toISOString()}}));
+  await client.invalidateQueries({queryKey:["pitwall","rpc"]});
+  await waitFor(()=>expect(screen.queryByText("Sector 2/3")).not.toBeInTheDocument());
+ });
 });

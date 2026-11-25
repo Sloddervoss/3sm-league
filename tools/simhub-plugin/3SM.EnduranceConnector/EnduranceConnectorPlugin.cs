@@ -66,7 +66,7 @@ namespace ThreeSM.EnduranceConnector
         // één keer mee in het eerstvolgende frame.
         private readonly PitVisitLearner _pitVisits = new PitVisitLearner();
         private readonly SectorProgressMonitor _sectorProgress = new SectorProgressMonitor();
-        private string _sectorBoundariesKey;
+        private long _lastSectorLayoutProbeMs = -3000;
         private readonly List<V3PitVisit> _pendingPitVisits = new List<V3PitVisit>();
         private long _sequence = -1;
         private long _lastQueuedMilliseconds;
@@ -707,6 +707,8 @@ namespace ThreeSM.EnduranceConnector
                     _sessionId = "simhub-" + Guid.NewGuid().ToString("N");
                     _tyreTracker.Reset();
                     _tyreGate.Reset();
+                    _sectorProgress.Interrupt();
+                    _pitVisits.Interrupt();
                     Interlocked.Exchange(ref _sequence, -1);
                 }
                 if (!running && _gameWasRunning)
@@ -715,6 +717,11 @@ namespace ThreeSM.EnduranceConnector
                     // Einde van de sessie: open pitbezoek, lopende ronde en de laatste ankers
                     // gaan er met een expliciete reden uit in plaats van te blijven hangen.
                     EndMeasurementSession("session_end");
+                }
+                if (!isInCar)
+                {
+                    _sectorProgress.Interrupt();
+                    _pitVisits.Interrupt();
                 }
                 _gameWasRunning = running;
                 // Meetlaag: elke tick een monster, vóór de pairing- en intervalpoort. Of er
@@ -1035,7 +1042,7 @@ namespace ThreeSM.EnduranceConnector
                     player == null ? null : player.Name,
                     GetNullableString(manager, Settings.CurrentDriverNameProperty)),
                 CurrentDriverId = player == null ? null : player.Id,
-                ObservedSessionId = BuildObservedSessionId(manager, channels),
+                ObservedSessionId = BuildObservedSessionId(channels),
                 LatAccelG = DirectSdkNumber(sdk, IrSdkChannels.LatAccel, 1.0 / IrSdkUnits.StandardGravity, -10, 10, 3),
                 LongAccelG = DirectSdkNumber(sdk, IrSdkChannels.LongAccel, 1.0 / IrSdkUnits.StandardGravity, -10, 10, 3),
                 // Intentie van de rijder, geen uitkomst; -1 (geen waarde) wordt null.
@@ -1066,13 +1073,19 @@ namespace ThreeSM.EnduranceConnector
         /// plus het sessienummer verandert bij practice → qualify → race, en dan begint de
         /// meetlaag een nieuw segment zonder dat de plugin herstart.
         /// </summary>
-        private static string BuildObservedSessionId(PluginManager manager, RawChannelReader channels)
+        private static string BuildObservedSessionId(RawChannelReader channels, bool requireStrong = false)
         {
-            var uniqueId = GetNullableInt(manager, "DataCorePlugin.GameRawData.SessionData.WeekendInfo.SessionUniqueID");
             var sessionNumber = channels.ReadInt("SessionNum", 0, 1000);
-            if (!uniqueId.HasValue && !sessionNumber.HasValue) return null;
-            var text = "sim"
-                + (uniqueId.HasValue ? "-" + uniqueId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty)
+            var subSession = channels.ReadWeekendPositiveId("SubSessionID");
+            var session = channels.ReadWeekendPositiveId("SessionID");
+            var uniqueId = channels.ReadInt("SessionUniqueID", 1, int.MaxValue);
+            var id = subSession.HasValue ? "-sub" + subSession.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : session.HasValue ? "-event" + session.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : uniqueId.HasValue ? "-uid" + uniqueId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : null;
+            if (requireStrong && (id == null || !sessionNumber.HasValue)) return null;
+            if (id == null && !sessionNumber.HasValue) return null;
+            var text = "sim" + id
                 + (sessionNumber.HasValue ? "-s" + sessionNumber.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
             return text;
         }
@@ -1660,40 +1673,32 @@ namespace ThreeSM.EnduranceConnector
             var rawChannels = new RawChannelReader(snapshot, property => GetRaw(manager, property));
             var onPitRoad = CaptureValueRules.OnPitRoad(rawChannels.ReadBool("OnPitRoad"), inPitLaneProperty);
 
-            // Pitbezoek-leren. Alleen bij een echte waarneming van de pitstraat,
-            // baanpositie en sessietijd; ontbreekt er één, dan blijft de toestand
-            // staan zoals hij was in plaats van een verzonnen overgang te maken.
-            var pitTrackKey = (trackName ?? "unknown") + "|" + (trackConfig ?? string.Empty);
-            _pitVisits.BeginTrack(pitTrackKey);
+            var observedSession = BuildObservedSessionId(rawChannels, requireStrong: true);
+            var sessionType = ReadSessionType(snapshot.SessionTypeName, rawChannels);
+            var sessionKey = _sessionId + "|" + (observedSession ?? BuildObservedSessionId(rawChannels)) + "|" + sessionType;
+            var raceSessionKey = observedSession == null ? null : sessionKey;
+            var trackId = TrackIdentityReader.Read(snapshot);
+            var trackKey = trackName == null && !trackId.HasValue ? null
+                : (trackId.HasValue ? trackId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : trackName)
+                    + "|" + (trackConfig ?? string.Empty);
             var lapDistance = NormalizeLapDist(lapDistancePct);
-            if (onPitRoad.HasValue && lapDistance.HasValue && sessionTimeSeconds.HasValue)
-            {
-                var evidence = _pitVisits.Update(
-                    sessionTimeSeconds.Value,
-                    lapDistance.Value,
-                    GetDouble(manager, Settings.SpeedProperty, 0),
-                    onPitRoad.Value);
-                if (evidence != null) _pendingPitVisits.Add(ToV3PitVisit(evidence));
-            }
+            var speed = GetNullableDouble(manager, Settings.SpeedProperty, false);
+            var evidence = _pitVisits.ObserveRace(sessionType, raceSessionKey,
+                trackKey == null || carId == null ? null : trackKey + "|" + carId,
+                isInCar ? sessionTimeSeconds : null, lapDistance, speed, onPitRoad);
+            if (evidence != null && evidence.Accepted) _pendingPitVisits.Add(ToV3PitVisit(evidence));
 
-            // 0.7.6.7 — live sectorklok uit baanpositie. Grenzen komen bij voorkeur
-            // uit de sessiedata; ontbreken ze, dan leert de monitor ze zelf.
-            var sectorTrackKey = (trackName ?? "unknown") + "|" + (trackConfig ?? string.Empty);
-            if (!string.IsNullOrEmpty(sectorTrackKey) && !string.Equals(sectorTrackKey, _sectorBoundariesKey, StringComparison.OrdinalIgnoreCase))
+            _sectorProgress.BeginContext(trackKey, sessionKey);
+            var layoutNow = _sendClock.ElapsedMilliseconds;
+            if (isInCar && !_sectorProgress.HasPublishedLayout && layoutNow - _lastSectorLayoutProbeMs >= 3000)
             {
-                _sectorBoundariesKey = sectorTrackKey;
-                var published = rawChannels.ReadSectorStarts();
-                var publishedCount = published == null ? 0 : published.Length + 1;
-                _sectorProgress.PublishBoundaries(sectorTrackKey, published, publishedCount);
+                _lastSectorLayoutProbeMs = layoutNow;
+                _sectorProgress.PublishBoundaries(rawChannels.ReadSectorStarts());
             }
             var sectorProgress = _sectorProgress.Update(
-                sectorTrackKey,
-                currentLapElapsed,
-                lapDistancePct,
-                GetNullableInt(manager, "DataCorePlugin.GameData.NewData.CurrentSectorIndex"),
-                GetNullableInt(manager, "DataCorePlugin.GameData.NewData.SectorsCount"),
-                onPitRoad,
-                completedLaps);
+                isInCar ? currentLapElapsed : null, lapDistance,
+                snapshot.CurrentSectorIndex, snapshot.SectorsCount, onPitRoad,
+                NonNegativeOrNull(GetNullableInt(manager, Settings.CompletedLapsProperty)));
 
             var opponents = BuildOpponentSnapshot(snapshot, rawChannels);
             LogDriverRatingSnapshot(opponents);
@@ -1727,7 +1732,7 @@ namespace ThreeSM.EnduranceConnector
                 Identity = new V3Identity
                 {
                     // Officiële iRacing-track-id voor de Pitwall-kaartkoppeling (op main sinds 8913ba3).
-                    TrackId = TrackIdentityReader.Read(snapshot),
+                    TrackId = trackId,
                     CurrentDriverId = currentDriverId,
                     CurrentDriverName = currentDriverName,
                     CarId = carId,
@@ -1746,7 +1751,8 @@ namespace ThreeSM.EnduranceConnector
                     StartLights = startLights,
                     PitLaneOpen = pitLaneOpen,
                     IsStartSequence = isStartSequence,
-                    SessionType = ReadSessionType(manager, rawChannels),
+                    SessionType = sessionType,
+                    ObservedSessionId = observedSession,
                 },
                 Timing = new V3Timing
                 {
@@ -2293,7 +2299,7 @@ namespace ThreeSM.EnduranceConnector
                 if(clock.HasValue) _paceLastClock=clock.Value;
                 if(clock.HasValue && _paceSampleAt>=0 && clock>=_paceSampleAt && clock-_paceSampleAt<0.049999) return;
                 _paceSampleAt=clock??-1;
-                var observedSession=BuildObservedSessionId(manager,channels);
+                var observedSession=BuildObservedSessionId(channels);
                 var metadataKey=observedSession+":"+channels.ReadTrackConfiguration();
                 if(metadataKey!=_paceMetadataKey || !clock.HasValue || clock<_paceMetadataAt || clock-_paceMetadataAt>=1)
                 {
@@ -2908,23 +2914,15 @@ namespace ThreeSM.EnduranceConnector
             using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(body))) return serializer.ReadObject(stream) as T;
         }
 
-        /// <summary>
-        /// Sessiesoort met de paden die SimHub echt kent. Het kale "SessionTypeName"
-        /// bestaat niet als property-pad en gaf altijd null, waardoor de leerketen
-        /// niets kon toeschrijven. Volgorde: officiële SDK-property, dan NewData,
-        /// dan de ruwe iRacing-kanalen.
-        /// </summary>
-        private static string ReadSessionType(PluginManager manager, RawChannelReader rawChannels)
+        private static string ReadSessionType(string snapshotType, RawChannelReader channels)
         {
-            var value = GetNullableString(manager, "DataCorePlugin.GameData.SessionTypeName")
-                ?? GetNullableString(manager, "DataCorePlugin.GameData.NewData.SessionTypeName")
-                ?? (rawChannels == null ? null : rawChannels.ReadText("SessionTypeName"))
-                ?? (rawChannels == null ? null : rawChannels.ReadText("SessionType"));
+            // Query the current iRacing session by index, not an unscoped raw property.
+            var index = channels.ReadInt("SessionNum", 0, 1000);
+            var value = index.HasValue ? channels.ReadSessionText(index.Value, "SessionType") : null;
+            value = FirstNonEmpty(value, snapshotType);
             if (value == null) return null;
-            // iRacing levert "Offline Testing" en "Lone Qualify"; de leerketen wil de
-            // soort letterlijk, dus alleen trimmen en de lengte begrenzen.
             value = value.Trim();
-            return value.Length > 32 ? value.Substring(0, 32) : value;
+            return value.Length > 32 || string.Equals(value, "unknown", StringComparison.OrdinalIgnoreCase) ? null : value;
         }
 
         private static object GetRaw(PluginManager manager, string property) { if (manager == null || string.IsNullOrWhiteSpace(property)) return null; try { return manager.GetPropertyValue(property); } catch { return null; } }

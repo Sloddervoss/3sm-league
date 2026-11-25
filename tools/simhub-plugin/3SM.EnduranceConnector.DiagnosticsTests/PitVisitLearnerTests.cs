@@ -46,11 +46,8 @@ internal static class PitVisitLearnerTests
             learner.Update(8.0, 0.40, 0.0, true);
             learner.Update(9.0, 0.40, 0.0, true);
             var evidence = learner.Update(10.0, 0.4001, 70.0, false);
-            c("pitvisit_tow_is_refused/1", evidence != null, "bezoek eindigt");
-            if (evidence == null) return;
-            c("pitvisit_tow_is_refused/2", evidence.Jumped, "sprong wordt herkend");
-            c("pitvisit_tow_is_refused/3", evidence.Skipped == "jumped", "bezoek mag niet tellen");
-            c("pitvisit_tow_is_refused/4", learner.Visits == 0, "bezoek wordt niet bewaard");
+            c("pitvisit_tow_is_refused/1", evidence == null, "na meetgat geen voltooid bezoek");
+            c("pitvisit_tow_is_refused/2", learner.Visits == 0, "bezoek wordt niet bewaard");
         });
 
         Try(c, "pitvisit_lane_time_gate", () =>
@@ -115,6 +112,29 @@ internal static class PitVisitLearnerTests
             learner.BeginTrack("spa|Grand Prix");
             c("pitvisit_new_track_resets/2", learner.Visits == 0, "circuitwissel wist de punten");
             c("pitvisit_new_track_resets/3", learner.StretchSeconds == null, "stretch hoort bij het circuit");
+        });
+
+        Try(c, "pitvisit_race_only", () =>
+        {
+            var learner = new PitVisitLearner();
+            Func<string, string, double, bool, PitVisitEvidence> tick = (type, session, time, pit) =>
+                learner.ObserveRace(type, session, "imola|gp|car", time, .35, 50, pit);
+            foreach (var type in new[] { "Practice", "Qualify", "Offline Testing", "Race-like", null })
+            {
+                tick(type, "practice", 0, false);
+                for (var i = 1; i <= 6; i++) tick(type, "practice", i, true);
+                c("pitvisit_race_only/deny-" + type, tick(type, "practice", 7, false) == null && learner.Visits == 0,
+                    "niet-race levert geen meting of leerpunt");
+            }
+            tick("Race", "race-1", 0, false);
+            for (var i = 1; i <= 6; i++) tick("Race", "race-1", i, true);
+            c("pitvisit_race_only/race", tick("Race", "race-1", 7, false)?.Accepted == true && learner.Visits == 1,
+                "echte race mag meten");
+            tick("Race", "race-1", 8, true);
+            tick("Race", "race-1", 9, true);
+            tick("Practice", "practice", 10, true);
+            c("pitvisit_race_only/session-crossing", tick("Race", "race-2", 11, false) == null && learner.Visits == 1,
+                "open bezoek vervalt; bewezen eerdere racemeting blijft behouden");
         });
 
         return passed;

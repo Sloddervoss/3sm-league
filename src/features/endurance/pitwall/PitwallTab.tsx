@@ -16,7 +16,6 @@ import { DecisionBand } from "./DecisionBand";
 import { usePitwallStrategy } from "./usePitwallStrategy";
 import { PitStrategyBlock } from "./PitStrategyBlock";
 import { useLearnedPitLoss } from "./useLearnedPitLoss";
-import { PitSectorClockLine } from "./PitSectorClockLine";
 import { FuelPanel } from "./FuelPanel";
 import { PitStopAnchor } from "./PitStopAnchor";
 import { StintDriverPanel } from "./StintDriverPanel";
@@ -434,7 +433,7 @@ export const PitwallTab = ({ event }: Props) => {
                       nextDriverName={nextDriverName}
                       pitLoss={isDemo ? null : real.pitStopMeasurement}
                       learnedLoss={isDemo ? null : learnedPitLoss}
-                      sectorClock={isDemo ? null : real.v3_normalized?.sectorProgress ?? null}
+                      sectorClock={!isDemo && isLive ? real.v3?.sectorProgress : null}
                     />
                   </div>
                   <AlertZone alerts={alerts} />
