@@ -22,6 +22,7 @@ export interface ServerFuelFacts {
   car: unknown;
   track: unknown;
   layout: unknown;
+  sessionType: unknown;
   sessionKey: unknown;
   lap: unknown;
   startedAt: unknown;
@@ -69,6 +70,11 @@ export function qualifyServerFacts(facts: ServerFuelFacts | null): QualifiedFuel
   if (!label(facts.driver) || !label(facts.car) || !label(facts.layout)) return null;
   if (!integral(facts.track) || (facts.track as number) < 0) return null;
   if (!key(facts.sessionKey)) return null;
+  // Sessiesoort is een poort, geen detail: zonder soort is een ronde niet toe te
+  // schrijven, en een Test-sessie is precies de vervuiling die we weren.
+  if (!label(facts.sessionType)) return null;
+  const sessionType = facts.sessionType;
+  if (/^test/i.test(sessionType) || /offline/i.test(sessionType)) return null;
   if (!integral(facts.lap) || (facts.lap as number) < 1) return null;
   if (!finite(facts.startedAt) || !finite(facts.endedAt)) return null;
   if (!finite(facts.samples) || !integral(facts.samples) || (facts.samples as number) < 2) return null;
@@ -111,5 +117,6 @@ export function qualifyServerFacts(facts: ServerFuelFacts | null): QualifiedFuel
     endedAt,
     knownAt: facts.knownAt,
     usedLitres: used,
+    sessionType,
   };
 }

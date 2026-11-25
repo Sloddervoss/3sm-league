@@ -14,6 +14,7 @@ const base: ServerFuelFacts = {
   car: "porsche992rgt3",
   track: 95,
   layout: "International",
+  sessionType: "Race",
   sessionKey: "simhub-c37ea97ec9ae4938b8f2267effd715db",
   lap: 4,
   startedAt: 1_800_000_000_000,
@@ -55,6 +56,16 @@ describe("qualifyServerFacts", () => {
     const observation = qualifyServerFacts(base);
     expect(observation?.usedLitres).toBe(3.6156);
     expect(qualifyServerFacts(withFacts({}))?.usedLitres).toBe(observation?.usedLitres);
+  });
+
+  it("refuses a lap that cannot be attributed to a session type", () => {
+    // Testritten zijn precies de vervuiling: geen soort, of Test, betekent niet leren.
+    expect(qualifyServerFacts(withFacts({ sessionType: null }))).toBeNull();
+    expect(qualifyServerFacts(withFacts({ sessionType: "" }))).toBeNull();
+    expect(qualifyServerFacts(withFacts({ sessionType: "Test" }))).toBeNull();
+    expect(qualifyServerFacts(withFacts({ sessionType: "Offline Testing" }))).toBeNull();
+    expect(qualifyServerFacts(withFacts({ sessionType: "Practice" }))?.sessionType).toBe("Practice");
+    expect(qualifyServerFacts(withFacts({ sessionType: "Race" }))?.sessionType).toBe("Race");
   });
 
   it("refuses an incomplete sample train", () => {

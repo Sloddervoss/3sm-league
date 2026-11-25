@@ -26,6 +26,8 @@ export interface QualifiedFuelObservation {
   endedAt: number;
   knownAt: number;
   usedLitres: number;
+  /** Sessiesoort zoals de connector hem meldde; leeg als de bron hem niet kent. */
+  sessionType?: string;
 }
 export interface ProspectiveFuelForecast {
   id: string;
