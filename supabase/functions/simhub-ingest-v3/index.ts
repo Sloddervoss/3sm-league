@@ -317,6 +317,16 @@ Deno.serve(async (request) => {
           // het blok herhaalt die waarde tot de wear verandert. De ronde en de
           // sessietijd komen daarom uit het frame; zie _shared/tyreObservation.ts.
           const timing = tyreObservationTiming(tyres, context.normalized);
+          const frame = context.normalized;
+          // Same accepted frame, never infer race identity from device health or a later frame.
+          const shadowEvidence = frame && frame.session.sessionType?.trim().toLowerCase() === "race"
+            && frame.session.observedSessionId && context.ownerUserId && frame.identity.currentDriverId
+            && frame.identity.carId && frame.identity.trackId && frame.identity.trackConfig
+            ? { owner: context.ownerUserId, race: frame.session.observedSessionId,
+              driver: frame.identity.currentDriverId, car: frame.identity.carId,
+              track: frame.identity.trackId, layout: frame.identity.trackConfig, compound: tyres.compoundId,
+              capturedAt: frame.capturedAt, inCar: frame.session.isInCar }
+            : null;
           const row = {
             sessionKey: transport,
             frameSequence: sequence,
@@ -341,7 +351,7 @@ Deno.serve(async (request) => {
             onPitRoad: context.normalized?.track?.onPitRoad ?? null,
             fuelLitres: context.normalized?.fuel?.fuelLitres ?? null,
             fuelCapacityLitres: context.normalized?.fuel?.fuelCapacityLitres ?? null,
-            raw: tyres,
+            raw: shadowEvidence ? { ...tyres, shadowRaceV1: shadowEvidence } : tyres,
           };
           const { error: tyreError } = await service.rpc("simhub_record_tyre_observations", {
             p_token_hash: await sha256Hex(token),
