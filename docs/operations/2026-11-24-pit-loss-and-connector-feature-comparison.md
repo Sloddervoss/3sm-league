@@ -49,7 +49,10 @@ legt vast **hoe zij het doen**, **wat wij al doen**, en **wat wij overnemen**.
 
 ## Wat wij daarmee doen
 
-De formule is de kern: **pitverlies = pitstraattijd + stilstaan − stretch**.
+De formule is de kern: **pitverlies = pitstraattijd − stretch**, waarbij de
+stilstaantijd ín de pitstraattijd zit en apart wordt getoond. Stilstaan er nog
+bij optellen zou dubbel tellen; de vaste 3,0 s box-overhead geldt alleen bij het
+schatten van een drive-through uit een stop.
 De stretch is wat wij nog misten; "lane time minus gemiddelde rondetijd" is
 structureel te grof omdat het stuk pitstraat-afstand per circuit verschilt.
 
