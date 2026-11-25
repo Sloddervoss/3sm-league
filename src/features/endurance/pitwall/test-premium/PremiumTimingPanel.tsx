@@ -63,6 +63,8 @@ function FocusCell({
   label,
   opponent,
   own,
+  gapTitle,
+  gapNote,
 }: {
   tone: "ahead" | "own" | "behind";
   label: string;
@@ -75,6 +77,8 @@ function FocusCell({
     gap?: string | null;
     pit?: boolean;
   };
+  gapTitle?: string;
+  gapNote?: string;
 }) {
   const value = own
     ? {
@@ -102,7 +106,16 @@ function FocusCell({
           <span className="ptp-focus-pos">{value.position != null ? `P${renderPosition(value.position)}` : "P—"}</span>
           {value.number && <span className="ptp-focus-number">#{value.number}</span>}
           <span className="ptp-focus-name">{value.name}</span>
-          {value.gap && <span className={`ptp-focus-gap${value.pit ? " is-pit" : ""}`}>{value.gap}</span>}
+          {value.gap && (
+            <span
+              className={`ptp-focus-gap${value.pit ? " is-pit" : ""}`}
+              title={gapTitle}
+              aria-label={gapTitle ? `${gapTitle}: ${value.gap}` : undefined}
+            >
+              {value.gap}
+            </span>
+          )}
+          {gapNote && <span className="ptp-focus-gap-note">{gapNote}</span>}
         </span>
       ) : (
         <span className="ptp-focus-value is-empty">—</span>
@@ -314,10 +327,12 @@ export function PremiumTimingPanel({
             </span>
           </div>
         </td>
-        <td className="ptp-col-car">
-          <span className="ptp-car-name" title={carName ?? undefined}>
-            {carName ?? "—"}
-          </span>
+        <td
+          data-timing="gap"
+          className="ptp-col-gap"
+          aria-label={r.isPlayer ? "Gap tot jouw auto: nul" : `Gap tot jouw auto: ${renderGap(r, false)}`}
+        >
+          {renderGap(r, false)}
         </td>
         <td
           data-timing="last-lap"
@@ -357,7 +372,6 @@ export function PremiumTimingPanel({
             </span>
           )}
         </td>
-        <td className="ptp-col-gap">{renderGap(r, false)}</td>
         <td className="ptp-col-pit">
           {r.inPit ? (
             <span className="ptp-pit" title="Auto in de pitstraat volgens de telemetrie">
@@ -367,6 +381,11 @@ export function PremiumTimingPanel({
             <span className="ptp-empty">—</span>
           )}
         </td>
+        <td className="ptp-col-car">
+          <span className="ptp-car-name" title={carName ?? undefined}>
+            {carName ?? "—"}
+          </span>
+        </td>
       </tr>
     );
   };
@@ -374,10 +393,10 @@ export function PremiumTimingPanel({
   if (standings.noData) {
     return (
       <section className="ptp-panel ptp-timing" data-pitwall-slot="standings" data-premium-timing="true" data-live={live ? "true" : "false"}>
-        <header className="ptp-panel-head">
-          <div>
-            <p className="ptp-kicker">Timing tower</p>
+        <header className="ptp-panel-head ptp-timing-head">
+          <div className="ptp-timing-title">
             <h2>Live timing</h2>
+            <span className="ptp-timing-count">geen data</span>
           </div>
           <span className={`ptp-live-pill${live ? " is-live" : ""}`}>
             <span aria-hidden className="ptp-dot" />
@@ -393,11 +412,21 @@ export function PremiumTimingPanel({
   }
 
   return (
-    <section className="ptp-panel ptp-timing" data-pitwall-slot="standings" data-premium-timing="true" data-live={live ? "true" : "false"} data-ptp-view={view}>
+    <section className="ptp-panel ptp-timing" data-pitwall-slot="standings" data-premium-timing="true" data-live={live ? "true" : "false"} data-ptp-view={view} data-ptp-single-class={classes.length === 1 ? "true" : undefined}>
       <header className="ptp-panel-head ptp-timing-head">
-        <div className="min-w-0">
-          <p className="ptp-kicker">Timing tower · {rows.length} auto's</p>
+        <div className="ptp-timing-title">
           <h2>Live timing</h2>
+          <span className="ptp-timing-count">{rows.length} auto&apos;s</span>
+        </div>
+        <div className="ptp-timing-tabs" role="group" aria-label="Timing-weergave">
+          <button type="button" aria-pressed={view === "live"} aria-label="Live timing" onClick={() => setView("live")}>
+            Alles
+          </button>
+          {classes.length > 1 && (
+            <button type="button" aria-pressed={view === "class"} onClick={() => setView("class")}>
+              Klasse
+            </button>
+          )}
         </div>
         <div className="ptp-timing-actions">
           <span className={`ptp-live-pill${live ? " is-live" : ""}`}>
@@ -412,14 +441,8 @@ export function PremiumTimingPanel({
         </div>
       </header>
 
-      <div className="ptp-timing-tabs" role="group" aria-label="Timing-weergave">
-        <button type="button" aria-pressed={view === "live"} onClick={() => setView("live")}>
-          Live timing
-        </button>
-        <button type="button" aria-pressed={view === "class"} onClick={() => setView("class")}>
-          Klasse
-        </button>
-        {view === "class" && classes.length > 1 && (
+      {view === "class" && classes.length > 1 && (
+        <div className="ptp-timing-filterrow">
           <span className="ptp-class-filter">
             {classes.map((name) => (
               <button
@@ -432,12 +455,16 @@ export function PremiumTimingPanel({
               </button>
             ))}
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {retained.laps.size > 0 && (
-        <p className="ptp-timing-legend" data-ptp-verified-legend="true">
-          R… bij een sectortijd = laatst geverifieerde volledige ronde; live sectoren tonen hun eigen ronde.
+        <p
+          className="ptp-timing-legend"
+          data-ptp-verified-legend="true"
+          title="R… bij een sectortijd = laatst geverifieerde volledige ronde; live sectoren tonen hun eigen ronde."
+        >
+          R = laatst geverifieerde ronde
         </p>
       )}
 
@@ -453,6 +480,8 @@ export function PremiumTimingPanel({
             gap: standings.ahead ? (standings.ahead.inPit ? "PIT" : renderGap(standings.ahead)) : null,
             pit: Boolean(standings.ahead?.inPit),
           }}
+          gapTitle={standings.ahead ? "Gap tot de auto voor je" : undefined}
+          gapNote={standings.ahead ? "tot voor" : undefined}
         />
         <FocusCell tone="behind" label="Achter" opponent={standings.behind} />
       </div>
@@ -463,6 +492,7 @@ export function PremiumTimingPanel({
         tabIndex={0}
         role="region"
         aria-label="Live timing — scrollbaar klassement"
+        aria-describedby="ptp-timing-note"
       >
         <table className="ptp-timing-table" data-sector-count={sectorCount} style={{ '--ptp-sector-count': Math.max(1, sectorCount) } as CSSProperties}>
           <caption className="sr-only">
@@ -472,20 +502,20 @@ export function PremiumTimingPanel({
             <col className="ptp-col-pos" />
             <col className="ptp-col-num" />
             <col className="ptp-col-driver" />
-            <col className="ptp-col-car" />
+            <col className="ptp-col-gap" />
             <col className="ptp-col-time" />
             <col className="ptp-col-time ptp-col-best" />
             {Array.from({ length: Math.max(1, sectorCount) }, (_, n) => <col key={n} className="ptp-col-sector" />)}
             <col className="ptp-col-lap" />
-            <col className="ptp-col-gap" />
             <col className="ptp-col-pit" />
+            <col className="ptp-col-car" />
           </colgroup>
           <thead>
             <tr>
               <th scope="col" className="ptp-col-pos">P</th>
               <th scope="col" className="ptp-col-num">#</th>
               <th scope="col" className="ptp-col-driver">Coureur</th>
-              <th scope="col" className="ptp-col-car">Auto</th>
+              <th scope="col" className="ptp-col-gap" title="Gap tot jouw auto" aria-label="Gap tot jou">Gap</th>
               <th scope="col" className="ptp-col-time">Laatste</th>
               <th scope="col" className="ptp-col-time ptp-col-best">Beste</th>
               {sectorCount === 0 && <th scope="col" className="ptp-col-sector">Sectoren</th>}
@@ -493,8 +523,8 @@ export function PremiumTimingPanel({
                 <th key={n} scope="col" className="ptp-col-sector">S{n + 1}</th>
               ))}
               <th scope="col" className="ptp-col-lap">Ronde</th>
-              <th scope="col" className="ptp-col-gap">Gap tot jou</th>
               <th scope="col" className="ptp-col-pit">Pit</th>
+              <th scope="col" className="ptp-col-car">Auto</th>
             </tr>
           </thead>
           {/* Alleen vastzetten als er meer dan één auto is; bij een enkele auto
@@ -522,9 +552,8 @@ export function PremiumTimingPanel({
         </table>
       </div>
 
-      <p className="ptp-timing-note">
-        Snapshot van tegenstanders, geen volledig klassement. +/− is het positieverschil per auto sinds de vorige
-        meting — geen inhaalclaim. Gap is tot jouw auto. Scroll voor alle rijen.
+      <p className="ptp-timing-note" id="ptp-timing-note">
+        Snapshot, geen volledig klassement · gap t.o.v. jou · +/− = positie sinds vorige meting, geen inhaalclaim.
       </p>
     </section>
   );

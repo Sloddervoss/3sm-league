@@ -24,6 +24,7 @@
     "test:db:pitwall-pit-visits": "node supabase/tests/personal-pit-visits.test.mjs",
     "test:pitwall-parity": "vitest run src/test/pitwallPitDurationParity.test.tsx",
     "test:browser:pitwall-share": "node scripts/personal-pitwall-share-browser.mjs",
+    "test:browser:pitwall-readability": "bash scripts/ensure-playwright-runtime.sh node scripts/pitwall-readability-browser.mjs",
     "smoke:iracing-catalog": "bash scripts/ensure-playwright-runtime.sh node scripts/iracing-catalog-visual-smoke.mjs",
     "simhub:bridge": "node tools/simhub-bridge/server.mjs",
     "simhub:simulate": "node tools/simhub-bridge/simulate.mjs",
