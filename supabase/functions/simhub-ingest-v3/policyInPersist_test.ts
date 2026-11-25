@@ -313,6 +313,7 @@ for (const setting of ["false", "absent", "unavailable"]) Deno.test({
     const previous = env.map(key => Deno.env.get(key));
     let handler: ((request: Request) => Response | Promise<Response>) | undefined;
     const calls: string[] = [];
+    let tyreRaw: Record<string, unknown> | undefined;
     const token = "s2e5-synthetic-device-token-000000000000";
     const fixture = JSON.parse(await Deno.readTextFile(
       new URL("../../../tools/simhub-plugin/3SM.EnduranceConnector.DiagnosticsTests/Fixtures/v3-frame-baseline.json", import.meta.url),
@@ -340,7 +341,10 @@ for (const setting of ["false", "absent", "unavailable"]) Deno.test({
           return reply([{ result: "accepted", received_at: "synthetic", observation_policy: { captureAllowed: true, policyVersion: 2 } }]);
         }
         if (name === "simhub_observation_policy_v1") return reply({ captureAllowed: true, policyVersion: 2 });
-        if (name === "simhub_record_tyre_observations") return reply(null);
+        if (name === "simhub_record_tyre_observations") {
+          tyreRaw = JSON.parse(String(init?.body)).p_rows[0].raw;
+          return reply(null);
+        }
         throw new Error("unexpected URL " + url.pathname);
       };
       // A distinct module instance so the env flag is read as "false".
@@ -349,10 +353,19 @@ for (const setting of ["false", "absent", "unavailable"]) Deno.test({
       const response = await handler!(new Request("http://s2e5.invalid/functions/v1/simhub-ingest-v3", {
         method: "POST",
         headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-        body: JSON.stringify({ ...fixture, observationPolicyRequested: true, capturedAt: new Date().toISOString(), sequence: 1 }),
+        body: JSON.stringify({ ...fixture, ownerUserId: "forged", observationPolicyRequested: true,
+          session: { ...fixture.session, sessionType: setting === "absent" ? "Practice" : "Race",
+            ...(setting === "unavailable" ? {} : { observedSessionId: "sim-sub24-s2" }) },
+          capturedAt: new Date().toISOString(), sequence: 1 }),
       }));
       const json = (await response.json()) as unknown as Reply;
       assert(response.status === 202, "flag off lost core");
+      assert(tyreRaw, "existing observation write must still run");
+      const proof = tyreRaw!.shadowRaceV1 as Record<string, unknown> | undefined;
+      if (setting === "false") {
+        assert(proof?.owner === "owner" && proof.race === "sim-sub24-s2" && proof.track === 42,
+          "race proof must bind same frame and server-resolved owner");
+      } else assert(proof === undefined, "practice or unproven race was marked trainable");
       assert(!calls.includes("simhub_observation_policy_v1"), "flag off queried the policy RPC");
       assert(calls.includes("simhub_observation_v1_available") === (setting === "unavailable"), "mode probe mismatch");
       assert(json.observation.enabled === (setting === "unavailable"), "flag not reported");
