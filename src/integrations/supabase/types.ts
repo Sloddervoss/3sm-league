@@ -2237,6 +2237,12 @@ export type Database = {
       }
     }
     Functions: {
+      pitwall_pit_loss_learned_v1: {
+        Args: { p_car: string; p_track: string; p_track_config?: string };
+        Returns: Json;
+      };
+      pitwall_pooling_state: { Args: Record<PropertyKey, never>; Returns: Json };
+      pitwall_set_pooling: { Args: { p_enabled: boolean }; Returns: Json };
       pitwall_tyre_estimate_v1: {
         Args: { p_event_id: string; p_team_id: string };
         Returns: Json;

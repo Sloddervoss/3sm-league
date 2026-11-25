@@ -20,6 +20,24 @@ export interface LearnedPitLoss {
   standingSeconds: number | null;
   stretchSeconds: number | null;
   lossSeconds: number | null;
+  /** Mediaan over race-stops van leden die delen toestaan; altijd apart gehouden. */
+  circuit: CircuitPitLoss | null;
+}
+
+export interface CircuitPitLoss {
+  source: "circuit" | "none";
+  samples: number;
+  laneSeconds: number | null;
+  standingSeconds: number | null;
+  stretchSeconds: number | null;
+  lossSeconds: number | null;
+}
+
+/** Wat de pitwall toont: eigen meting gaat vóór, circuit is een startwaarde. */
+export interface PitLossDisplay {
+  kind: "personal" | "circuit";
+  seconds: number;
+  samples: number;
 }
 
 export interface PitLossScope {
@@ -53,7 +71,41 @@ export function mapLearnedPitLoss(raw: unknown): LearnedPitLoss | null {
     standingSeconds: num(record.standingSeconds),
     stretchSeconds: num(record.stretchSeconds),
     lossSeconds: source === "personal" ? loss : null,
+    circuit: mapCircuitPitLoss(record.circuit),
   };
+}
+
+export function mapCircuitPitLoss(raw: unknown): CircuitPitLoss | null {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const samples = num(record.samples) ?? 0;
+  if (!Number.isInteger(samples) || samples < 0) return null;
+  const loss = num(record.lossSeconds);
+  const source = record.source === "circuit" && loss !== null && loss >= 0 ? "circuit" : "none";
+  return {
+    source,
+    samples,
+    laneSeconds: num(record.laneSeconds),
+    standingSeconds: num(record.standingSeconds),
+    stretchSeconds: num(record.stretchSeconds),
+    lossSeconds: source === "circuit" ? loss : null,
+  };
+}
+
+/**
+ * Eén regel in het blok. Eigen meting wint altijd; het circuitgetal vult alleen
+ * de leegte en wordt nooit als eigen meting gepresenteerd.
+ */
+export function pickPitLossDisplay(value: LearnedPitLoss | null | undefined): PitLossDisplay | null {
+  if (value == null) return null;
+  if (value.source === "personal" && value.lossSeconds != null) {
+    return { kind: "personal", seconds: value.lossSeconds, samples: value.samples };
+  }
+  const circuit = value.circuit;
+  if (circuit?.source === "circuit" && circuit.lossSeconds != null) {
+    return { kind: "circuit", seconds: circuit.lossSeconds, samples: circuit.samples };
+  }
+  return null;
 }
 
 export function hasLearnedLoss(value: LearnedPitLoss | null | undefined): value is LearnedPitLoss {
