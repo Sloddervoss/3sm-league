@@ -74,7 +74,7 @@ export function qualifyServerFacts(facts: ServerFuelFacts | null): QualifiedFuel
   // schrijven, en een Test-sessie is precies de vervuiling die we weren.
   if (!label(facts.sessionType)) return null;
   const sessionType = facts.sessionType;
-  if (/^test/i.test(sessionType) || /offline/i.test(sessionType)) return null;
+  if (sessionType.trim().toLowerCase() !== "race") return null;
   if (!integral(facts.lap) || (facts.lap as number) < 1) return null;
   if (!finite(facts.startedAt) || !finite(facts.endedAt)) return null;
   if (!finite(facts.samples) || !integral(facts.samples) || (facts.samples as number) < 2) return null;

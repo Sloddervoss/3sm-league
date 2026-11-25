@@ -252,7 +252,21 @@ namespace ThreeSM.EnduranceConnector
             return starts.Count > 0 && starts[0] == 0 ? starts.ToArray() : null;
         }
 
-public string ReadTrackConfiguration()
+        public int? ReadWeekendPositiveId(string member)
+        {
+            var data = GetMember(GetMember(_newData, "RawData"), "SessionData");
+            var weekend = GetMember(data, "WeekendInfo") ?? GetMember(SessionRoot(), "WeekendInfo");
+            var value = ToDouble(GetMember(weekend, member));
+            if (!value.HasValue && _getProperty != null)
+            {
+                try { value = ToDouble(_getProperty("DataCorePlugin.GameRawData.SessionData.WeekendInfo." + member)); }
+                catch { }
+            }
+            return value.HasValue && value >= 1 && value <= int.MaxValue && value.Value == Math.Floor(value.Value)
+                ? (int?)value.Value : null;
+        }
+
+        public string ReadTrackConfiguration()
         {
             var weekend = GetMember(SessionRoot(), "WeekendInfo")
                 ?? GetMember(GetMember(GetMember(_newData, "RawData"), "SessionData"), "WeekendInfo");

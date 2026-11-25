@@ -287,6 +287,8 @@ export type NormalizedTelemetryEnvelope = {
     startLights?: number | null;
     pitLaneOpen?: boolean | null;
     isStartSequence?: boolean;
+    sessionType?: string | null;
+    observedSessionId?: string | null;
   };
   timing: {
     currentLapElapsedSeconds: number | null;
@@ -615,7 +617,7 @@ export const parseTelemetryV3Envelope = (
   const session = asRecord(root.session, "session");
   // 0.5.6: de vlaggenmodule stuurt extra sessievelden mee. Ze zijn optioneel, zodat een
   // bestaande connector (zonder die sleutels) exact hetzelfde blijft werken.
-  exactKeysAllowExtra(session, ["isInCar", "sessionTimeSeconds", "sessionTimeRemainingSeconds", "sessionLapsRemaining", "flags", "sessionState"], ["primaryFlag", "flagColour", "flagSeverity", "startLights", "pitLaneOpen", "isStartSequence", "sessionType"], "session");
+  exactKeysAllowExtra(session, ["isInCar", "sessionTimeSeconds", "sessionTimeRemainingSeconds", "sessionLapsRemaining", "flags", "sessionState"], ["primaryFlag", "flagColour", "flagSeverity", "startLights", "pitLaneOpen", "isStartSequence", "sessionType", "observedSessionId"], "session");
   const timing = asRecord(root.timing, "timing");
   // S4: sectorsnelheden zijn additief. Ze staan naast de vier bevroren velden en
   // mogen ontbreken; de vier bestaande blijven verplicht.
@@ -691,6 +693,7 @@ export const parseTelemetryV3Envelope = (
       // deze sleutel verandert er niets aan een oudere connector, en de leerketen
       // weigert zelf alles zonder soort in plaats van te gokken.
       sessionType: v3OptionalText(session.sessionType, "session.sessionType", 32),
+      observedSessionId: v3OptionalText(session.observedSessionId, "session.observedSessionId", 120),
     },
     timing: {
       currentLapElapsedSeconds: v3Number(timing.currentLapElapsedSeconds, "timing.currentLapElapsedSeconds", { nullable: true, min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),

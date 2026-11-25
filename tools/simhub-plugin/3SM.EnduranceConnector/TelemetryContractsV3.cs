@@ -331,6 +331,7 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "isStartSequence", Order = 12, EmitDefaultValue = false)] public bool IsStartSequence { get; set; }
         /// <summary>0.7.6.6 additief: sessiesoort (Race/Practice/Qualifying/Test). Leeg als onbekend.</summary>
         [DataMember(Name = "sessionType", Order = 13, EmitDefaultValue = false)] public string SessionType { get; set; }
+        [DataMember(Name = "observedSessionId", Order = 14, EmitDefaultValue = false)] public string ObservedSessionId { get; set; }
     }
 
     [DataContract]

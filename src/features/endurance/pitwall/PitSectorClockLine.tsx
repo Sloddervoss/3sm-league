@@ -17,12 +17,12 @@ export const PitSectorClockLine = ({ raw }: { raw: unknown }) => {
         Sector {clock.index}/{clock.count}
       </span>
       <span className="flex items-center gap-2">
-        <span className="h-[3px] w-14 overflow-hidden rounded bg-white/10">
+        {clock.learned && <span className="h-[3px] w-14 overflow-hidden rounded bg-white/10">
           <span
             className="block h-full bg-sky-400"
             style={{ width: `${Math.round(clock.progressPct)}%` }}
           />
-        </span>
+        </span>}
         <span className="font-bold text-sky-300">{clock.elapsedSeconds.toFixed(1)} s</span>
       </span>
     </div>
