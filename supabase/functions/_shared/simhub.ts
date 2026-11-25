@@ -226,6 +226,18 @@ export type SimHubSessionState =
 export type SimHubTrackSurface =
   | "on_track" | "off_track" | "in_pit_stall" | "approaching_pits" | "not_in_world" | "unknown";
 
+/** Eén afgerond pitbezoek zoals de connector het meldt. */
+export type PitVisitBlock = {
+  entryPct: number;
+  exitPct: number;
+  laneSeconds: number;
+  standingSeconds: number;
+  stretchSeconds: number | null;
+  jumped: boolean;
+  /** Reden waarom de connector het bezoek zelf afkeurde; null als het telt. */
+  skipped: string | null;
+};
+
 export type NormalizedTelemetryEnvelope = {
   protocolVersion: 1 | 2 | 3;
   sequence: number;
@@ -377,6 +389,8 @@ export type NormalizedTelemetryEnvelope = {
    * haalt het eruit) maar naar het antwoord dat de connector krijgt, zodat een
    * outbox niet op een kale 202 opruimt.
    */
+  /** 0.7.6.6 — pitbezoeken van deze tick. Nooit fataal; leeg betekent: niets. */
+  pitVisits?: PitVisitBlock[] | null;
   measurementReport?: {
     events: SeriesReport<MeasurementEvent>;
     laps: SeriesReport<LapSummary>;
@@ -472,7 +486,7 @@ const v3SignedGap = (value: unknown, path: string): number | null => {
     value === undefined || value === null ? null : v3Boolean(value, path);
 
 const V3RequiredRootKeys = ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"];
-const V3OptionalRootKeys = ["opponents", "vehicle", "tyres", "brakes", "weather", "source", "schemaRevision", "capabilities", "environment", "measurementEvents", "lapSummaries", "paceCapture", "lapTimes"];
+const V3OptionalRootKeys = ["opponents", "vehicle", "tyres", "brakes", "weather", "source", "schemaRevision", "capabilities", "environment", "measurementEvents", "lapSummaries", "paceCapture", "lapTimes", "pitVisits"];
 
 /**
  * Rootkeys van een V3-frame: de verplichte moeten er zijn, de bekende optionele
@@ -493,6 +507,40 @@ const rootKeys = (
   }
   const accepted = acceptUnknownRootKeys(root, [...required, ...optional]);
   return accepted.accepted;
+};
+
+/**
+ * Pitbezoeken zijn een optioneel blok en mogen nooit een frame kosten: één
+ * verkeerde rij laat alleen dat blok vallen, met een logregel erbij. De grenzen
+ * zijn dezelfde als die van de connector, zodat een bezoek dat daar al door de
+ * poort kwam hier niet alsnog wordt goedgekeurd op onmogelijke waarden.
+ */
+const PitVisitMaxEntries = 50;
+const parsePitVisitsNeverFatal = (input: unknown): PitVisitBlock[] | null => {
+  if (input === undefined || input === null) return null;
+  try {
+    if (!Array.isArray(input)) throw new Error("pitVisits is not an array");
+    if (input.length > PitVisitMaxEntries) throw new Error(`pitVisits has more than ${PitVisitMaxEntries} entries`);
+    const rows: PitVisitBlock[] = [];
+    for (let i = 0; i < input.length; i += 1) {
+      const row = asRecord(input[i], `pitVisits[${i}]`);
+      rows.push({
+        entryPct: numberValue(row.entryPct, `pitVisits[${i}].entryPct`, { min: 0, max: 1 }),
+        exitPct: numberValue(row.exitPct, `pitVisits[${i}].exitPct`, { min: 0, max: 1 }),
+        laneSeconds: numberValue(row.laneSeconds, `pitVisits[${i}].laneSeconds`, { min: 0, max: 900 }),
+        standingSeconds: numberValue(row.standingSeconds, `pitVisits[${i}].standingSeconds`, { min: 0, max: 600 }),
+        stretchSeconds: row.stretchSeconds == null
+          ? null
+          : numberValue(row.stretchSeconds, `pitVisits[${i}].stretchSeconds`, { min: 0, max: 900 }),
+        jumped: row.jumped == null ? false : booleanValue(row.jumped, `pitVisits[${i}].jumped`),
+        skipped: row.skipped == null ? null : text(row.skipped, `pitVisits[${i}].skipped`, 32),
+      });
+    }
+    return rows.length ? rows : null;
+  } catch (error) {
+    console.warn("[ingest] pitVisits-blok afgekeurd:", (error as Error).message);
+    return null;
+  }
 };
 
 export const parseTelemetryV3Envelope = (
@@ -526,7 +574,7 @@ export const parseTelemetryV3Envelope = (
   const session = asRecord(root.session, "session");
   // 0.5.6: de vlaggenmodule stuurt extra sessievelden mee. Ze zijn optioneel, zodat een
   // bestaande connector (zonder die sleutels) exact hetzelfde blijft werken.
-  exactKeysAllowExtra(session, ["isInCar", "sessionTimeSeconds", "sessionTimeRemainingSeconds", "sessionLapsRemaining", "flags", "sessionState"], ["primaryFlag", "flagColour", "flagSeverity", "startLights", "pitLaneOpen", "isStartSequence"], "session");
+  exactKeysAllowExtra(session, ["isInCar", "sessionTimeSeconds", "sessionTimeRemainingSeconds", "sessionLapsRemaining", "flags", "sessionState"], ["primaryFlag", "flagColour", "flagSeverity", "startLights", "pitLaneOpen", "isStartSequence", "sessionType"], "session");
   const timing = asRecord(root.timing, "timing");
   // S4: sectorsnelheden zijn additief. Ze staan naast de vier bevroren velden en
   // mogen ontbreken; de vier bestaande blijven verplicht.
@@ -598,6 +646,10 @@ export const parseTelemetryV3Envelope = (
       isStartSequence: session.isStartSequence === undefined || session.isStartSequence === null
         ? false
         : booleanValue(session.isStartSequence, "session.isStartSequence"),
+      // 0.7.6.6 — sessiesoort (Practice/Race/Test). Additief en optioneel: zonder
+      // deze sleutel verandert er niets aan een oudere connector, en de leerketen
+      // weigert zelf alles zonder soort in plaats van te gokken.
+      sessionType: v3OptionalText(session.sessionType, "session.sessionType", 32),
     },
     timing: {
       currentLapElapsedSeconds: v3Number(timing.currentLapElapsedSeconds, "timing.currentLapElapsedSeconds", { nullable: true, min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
@@ -657,6 +709,7 @@ export const parseTelemetryV3Envelope = (
     schemaRevision: parseSchemaRevision(root.schemaRevision),
     capabilities: parseCapabilitiesNeverFatal(root.capabilities),
     environment: parseEnvironmentNeverFatal(root.environment),
+    pitVisits: parsePitVisitsNeverFatal(root.pitVisits),
     measurementEvents: measurementReport.events.rows.length ? measurementReport.events.rows : null,
     lapSummaries: measurementReport.laps.rows.length ? measurementReport.laps.rows : null,
     measurementReport,
