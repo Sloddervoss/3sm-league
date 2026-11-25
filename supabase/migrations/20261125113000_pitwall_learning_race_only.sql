@@ -2,6 +2,16 @@
 -- Deploy before offering the connector that attaches observedSessionId to its snapshots.
 BEGIN;
 
+-- The earlier qualifier did not record reliable race provenance. Do not silently
+-- carry trained fuel data into the race-only regime or delete it as a side effect.
+DO $guard$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pitwall_learning.fuel_visibility WHERE qualified_data IS NOT NULL) THEN
+    RAISE EXCEPTION 'Race-only cutover requires review of existing qualified fuel data';
+  END IF;
+END
+$guard$;
+
 ALTER TABLE pitwall_learning.pit_visits
   ADD COLUMN race_verified boolean NOT NULL DEFAULT false;
 
