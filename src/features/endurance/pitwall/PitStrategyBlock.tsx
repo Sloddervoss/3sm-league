@@ -1,6 +1,7 @@
 import type { PitwallStrategyRow } from "./pitwallHelpers";
 import { strategyStatusInfo, formatFuel } from "./pitwallHelpers";
 import type { PitStopMeasurement } from "./strategy/types";
+import { hasLearnedLoss, type LearnedPitLoss } from "./strategy/learnedPitLoss";
 
 interface Props {
   strategy: PitwallStrategyRow | null;
@@ -8,6 +9,8 @@ interface Props {
   nextDriverName?: string | null;
   /** Punt 9: gemeten pitlanetijd; null zolang er geen stop gemeten is. */
   pitLoss?: PitStopMeasurement | null;
+  /** Geleerd netto verlies (pitstraat min stretch); null zonder genoeg eigen stops. */
+  learnedLoss?: LearnedPitLoss | null;
 }
 
 /**
@@ -22,7 +25,7 @@ interface Props {
  * gewoon onwaar was. Wat een band moet doen hangt aan zijn graad en staat in de
  * beslissingsband. Wat hier overblijft is pitstraat, pitactie en coureurwissel.
  */
-export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss }: Props) => {
+export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss, learnedLoss }: Props) => {
   if (!strategy) {
     return (
       <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-4 text-center">
@@ -112,6 +115,24 @@ export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss
           <span className="text-gray-500">nog niet gemeten</span>
         )}
       </div>
+
+      {hasLearnedLoss(learnedLoss) && (
+        <div
+          className="mb-2 flex items-baseline justify-between gap-2 text-[11px]"
+          data-learned-pit-loss={learnedLoss.lossSeconds}
+        >
+          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Netto verlies · geleerd</span>
+          <span
+            className="font-bold text-emerald-300"
+            title={`Mediaan van ${learnedLoss.samples} eigen stops · pitstraat min stretch over dat stuk baan · eigen metingen, geen schatting`}
+          >
+            {learnedLoss.lossSeconds!.toFixed(1)} s
+            <span className="ml-1 font-normal text-gray-500">
+              ({learnedLoss.samples} {learnedLoss.samples === 1 ? "stop" : "stops"})
+            </span>
+          </span>
+        </div>
+      )}
 
       {pitLoss?.lastStop?.seconds != null && (
         <div

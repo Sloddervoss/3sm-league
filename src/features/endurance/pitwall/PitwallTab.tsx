@@ -15,6 +15,7 @@ import { OwnCarPanel } from "./OwnCarPanel";
 import { DecisionBand } from "./DecisionBand";
 import { usePitwallStrategy } from "./usePitwallStrategy";
 import { PitStrategyBlock } from "./PitStrategyBlock";
+import { useLearnedPitLoss } from "./useLearnedPitLoss";
 import { FuelPanel } from "./FuelPanel";
 import { PitStopAnchor } from "./PitStopAnchor";
 import { StintDriverPanel } from "./StintDriverPanel";
@@ -92,6 +93,16 @@ export const PitwallTab = ({ event }: Props) => {
   }, [demoScenario]);
 
   const isDemo = import.meta.env.DEV && demo !== null;
+  // Geleerd pitverlies hoort bij auto plus baan; de identiteit komt uit hetzelfde
+  // frame als de rest van de pitwall, dus geen tweede bron en geen tweede poller.
+  const identity = real.v3?.identity as
+    | { carId?: string | null; trackName?: string | null; trackConfig?: string | null }
+    | undefined;
+  const learnedPitLoss = useLearnedPitLoss({
+    car: identity?.carId ?? null,
+    track: identity?.trackName ?? null,
+    config: identity?.trackConfig ?? null,
+  });
   /* Fase 1: geen geldige racekoppeling? Dan zegt de pitwall waarom, in plaats van
      een oude race naast verse telemetrie te tonen. De tekst komt uit één plek
      (pitwallContextNotice) zodat server en UI hetzelfde verhaal vertellen. */
@@ -421,6 +432,7 @@ export const PitwallTab = ({ event }: Props) => {
                       driverName={driverName}
                       nextDriverName={nextDriverName}
                       pitLoss={isDemo ? null : real.pitStopMeasurement}
+                      learnedLoss={isDemo ? null : learnedPitLoss}
                     />
                   </div>
                   <AlertZone alerts={alerts} />
