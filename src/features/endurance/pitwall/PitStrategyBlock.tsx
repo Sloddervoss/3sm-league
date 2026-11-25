@@ -124,20 +124,10 @@ export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss
           data-learned-pit-loss={lossDisplay.seconds}
           data-learned-pit-loss-kind={lossDisplay.kind}
         >
-          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
-            {lossDisplay.kind === "personal" ? "Netto verlies · geleerd" : "Netto verlies · circuit"}
-          </span>
-          <span
-            className={lossDisplay.kind === "personal" ? "font-bold text-emerald-300" : "font-bold text-sky-300"}
-            title={lossDisplay.kind === "personal"
-              ? `Mediaan van ${lossDisplay.samples} eigen stops · pitstraat min stretch over dat stuk baan · eigen metingen, geen schatting`
-              : `Mediaan van ${lossDisplay.samples} race-stops van deelnemers die delen toestaan · startwaarde tot je zelf 3 stops hebt`}
-          >
+          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Pitverlies</span>
+          <span className={lossDisplay.kind === "personal" ? "font-bold text-emerald-300" : "font-bold text-sky-300"}>
             {lossDisplay.seconds.toFixed(1)} s
-            <span className="ml-1 font-normal text-gray-500">
-              ({lossDisplay.samples} {lossDisplay.samples === 1 ? "stop" : "stops"}
-              {lossDisplay.kind === "circuit" ? ", gedeeld" : ""})
-            </span>
+            <span className="ml-1 font-normal text-gray-500">{lossDisplay.kind === "personal" ? "eigen" : "circuit"}</span>
           </span>
         </div>
       )}
