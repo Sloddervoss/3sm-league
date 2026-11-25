@@ -3,6 +3,7 @@ import { strategyStatusInfo, formatFuel } from "./pitwallHelpers";
 import type { PitStopMeasurement } from "./strategy/types";
 import { pickPitLossDisplay, type LearnedPitLoss } from "./strategy/learnedPitLoss";
 import { PitPoolingToggle } from "./PitPoolingToggle";
+import { PitSectorClockLine } from "./PitSectorClockLine";
 
 interface Props {
   strategy: PitwallStrategyRow | null;
@@ -12,6 +13,8 @@ interface Props {
   pitLoss?: PitStopMeasurement | null;
   /** Geleerd netto verlies (pitstraat min stretch); null zonder genoeg eigen stops. */
   learnedLoss?: LearnedPitLoss | null;
+  /** Live sectorklok (afgeleid uit baanpositie); null zonder meting. */
+  sectorClock?: unknown;
 }
 
 /**
@@ -26,7 +29,7 @@ interface Props {
  * gewoon onwaar was. Wat een band moet doen hangt aan zijn graad en staat in de
  * beslissingsband. Wat hier overblijft is pitstraat, pitactie en coureurwissel.
  */
-export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss, learnedLoss }: Props) => {
+export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss, learnedLoss, sectorClock }: Props) => {
   const lossDisplay = pickPitLossDisplay(learnedLoss);
   if (!strategy) {
     return (
@@ -132,6 +135,7 @@ export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss
         </div>
       )}
       {lossDisplay && <PitPoolingToggle />}
+      <PitSectorClockLine raw={sectorClock} />
 
       {pitLoss?.lastStop?.seconds != null && (
         <div

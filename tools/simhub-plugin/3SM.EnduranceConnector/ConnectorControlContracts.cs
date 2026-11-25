@@ -45,7 +45,8 @@ namespace ThreeSM.EnduranceConnector
                     { "lapSummaries", 1 },
                     { "environment", 1 },
                     { "paceCapture", 1 },
-                    { "pitVisits", 1 }
+                    { "pitVisits", 1 },
+                    { "sectorProgress", 1 }
                 });
         }
 

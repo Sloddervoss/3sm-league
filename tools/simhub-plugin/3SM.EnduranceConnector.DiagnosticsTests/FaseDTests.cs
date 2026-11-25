@@ -520,6 +520,7 @@ internal static class FaseDTests
               baselineChecks += Group("PaceSourceSelectionTests", () => PaceSourceSelectionTests.Run(Check));
               baselineChecks += Group("LapAttributionTests", () => LapAttributionTests.Run(Check));
             baselineChecks += Group("PitVisitLearnerTests", () => PitVisitLearnerTests.Run(Check));
+            baselineChecks += Group("SectorProgressTests", () => SectorProgressTests.Run(Check));
             baselineChecks += Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
             baselineChecks += Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
             baselineChecks += Group("MeasurementPitEdgeTests", () => MeasurementPitEdgeTests.Run(Check));

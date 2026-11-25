@@ -89,6 +89,7 @@
     <!-- 0.7.2.0: pitbezoeken (intentie vs resultaat) en wear-ankers met bewijs. -->
     <Compile Include="PitServiceTracker.cs" />
     <Compile Include="PitVisitLearner.cs" />
+    <Compile Include="SectorProgressMonitor.cs" />
     <Compile Include="TyreAnchorTracker.cs" />
     <!-- 0.7.2.0: begrensde persistente outbox met ACK per rij, en het frame/de
          verzending met de batchgrenzen uit het contract. -->

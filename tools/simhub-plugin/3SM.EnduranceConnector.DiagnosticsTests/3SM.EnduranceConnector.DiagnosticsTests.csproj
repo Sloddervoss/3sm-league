@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="..\3SM.EnduranceConnector\PaceCapture.cs" Link="PaceCapture.cs" />
     <Compile Include="..\3SM.EnduranceConnector\PitVisitLearner.cs" Link="PitVisitLearner.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\SectorProgressMonitor.cs" Link="SectorProgressMonitor.cs" />
     <Compile Include="..\3SM.EnduranceConnector\DiagnosticsClient.cs" Link="DiagnosticsClient.cs" />
     <Compile Include="..\3SM.EnduranceConnector\UpdaterStateStore.cs" Link="UpdaterStateStore.cs" />
     <Compile Include="..\3SM.EnduranceConnector\SessionTelemetryReader.cs" Link="SessionTelemetryReader.cs" />

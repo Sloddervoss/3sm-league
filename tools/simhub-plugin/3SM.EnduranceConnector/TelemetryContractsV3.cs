@@ -25,6 +25,12 @@ namespace ThreeSM.EnduranceConnector
         /// afwezig betekent: deze connector levert geen pitbezoeken.
         /// </summary>
         [DataMember(Name = "pitVisits", Order = 21, EmitDefaultValue = false)] public List<V3PitVisit> PitVisits { get; set; }
+        /// <summary>
+        /// 0.7.6.7 additief — live sectorklok, afgeleid uit baanpositie. Geen
+        /// SDK-sectortijd: de klok loopt mee binnen de sector. Ontbreekt het blok,
+        /// dan is er deze tick geen betrouwbare meting.
+        /// </summary>
+        [DataMember(Name = "sectorProgress", Order = 22, EmitDefaultValue = false)] public V3SectorProgress SectorProgress { get; set; }
         [DataMember(Name = "protocolVersion", Order = 1)] public int ProtocolVersion { get; set; }
         [DataMember(Name = "sequence", Order = 2)] public long Sequence { get; set; }
         [DataMember(Name = "capturedAt", Order = 3)] public string CapturedAt { get; set; }
@@ -73,6 +79,7 @@ namespace ThreeSM.EnduranceConnector
     {
         [DataMember(Name = "paceCapture", Order = 9, EmitDefaultValue = false)] public int? PaceCapture { get; set; }
         [DataMember(Name = "pitVisits", Order = 10, EmitDefaultValue = false)] public int? PitVisits { get; set; }
+        [DataMember(Name = "sectorProgress", Order = 11, EmitDefaultValue = false)] public int? SectorProgress { get; set; }
         [DataMember(Name = "revision", Order = 1)] public int Revision { get; set; }
         [DataMember(Name = "pitService", Order = 2, EmitDefaultValue = false)] public int? PitService { get; set; }
         [DataMember(Name = "wearObservation", Order = 3, EmitDefaultValue = false)] public int? WearObservation { get; set; }
@@ -100,6 +107,7 @@ namespace ThreeSM.EnduranceConnector
                     case "environment": result.Environment = pair.Value; break;
                     case "paceCapture": result.PaceCapture = pair.Value; break;
                     case "pitVisits": result.PitVisits = pair.Value; break;
+                    case "sectorProgress": result.SectorProgress = pair.Value; break;
                 }
             }
             return result;
@@ -404,5 +412,19 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "stretchSeconds", Order = 5, EmitDefaultValue = false)] public double? StretchSeconds { get; set; }
         [DataMember(Name = "jumped", Order = 6, EmitDefaultValue = false)] public bool Jumped { get; set; }
         [DataMember(Name = "skipped", Order = 7, EmitDefaultValue = false)] public string Skipped { get; set; }
+    }
+    /// <summary>
+    /// Live sectorklok zoals de connector hem afleidt uit baanpositie. Geen
+    /// SDK-sectortijd: de klok loopt mee binnen de sector en de balk zegt of de
+    /// grenzen geleerd zijn.
+    /// </summary>
+    [DataContract]
+    public sealed class V3SectorProgress
+    {
+        [DataMember(Name = "index", Order = 1)] public int Index { get; set; }
+        [DataMember(Name = "count", Order = 2)] public int Count { get; set; }
+        [DataMember(Name = "elapsedSeconds", Order = 3)] public double ElapsedSeconds { get; set; }
+        [DataMember(Name = "progressPct", Order = 4)] public double ProgressPct { get; set; }
+        [DataMember(Name = "learned", Order = 5)] public bool Learned { get; set; }
     }
 }

@@ -37,7 +37,7 @@ lange sessie elke 6 uur op een nieuwe versie (met auto-update uit: elke 24 uur).
 
 ## Handmatige installatie via de publieke ZIP
 
-Voor een handmatige installatie download je `3SM.EnduranceConnector-0.7.6.6.zip` via de
+Voor een handmatige installatie download je `3SM.EnduranceConnector-0.7.6.7.zip` via de
 3SM-site. De alias `3SM.EnduranceConnector-latest.zip` blijft voor oude links bestaan, maar
 kan kort na een release nog de vorige bytes serveren; gebruik daarom het versiegebonden
 bestand. Sluit SimHub
@@ -50,10 +50,10 @@ De overgang `0.3.8.0 → 0.3.9.0` moet door het bekende 0.3.8.0 self-update-defe
 handmatig worden uitgevoerd. Vanaf 0.3.9.0 werken toekomstige ondersteunde updates weer via
 de normale automatische updater.
 
-**Huidige versie: `0.7.6.6`.** Zowel de automatische updater als de ZIP op de site leveren
+**Huidige versie: `0.7.6.7`.** Zowel de automatische updater als de ZIP op de site leveren
 die versie, en de koppelpagina linkt het versiegebonden ZIP
-`3SM.EnduranceConnector-0.7.6.6.zip` (de alias `3SM.EnduranceConnector-latest.zip` blijft
-bestaan voor handmatige installaties en oude links). `0.7.6.6` meldt per pitbezoek de pitstraattijd, het stilstaan en de stretch, en stuurt de sessiesoort mee; `0.7.6.5` houdt een bewezen sectortijd
+`3SM.EnduranceConnector-0.7.6.7.zip` (de alias `3SM.EnduranceConnector-latest.zip` blijft
+bestaan voor handmatige installaties en oude links). `0.7.6.7` meldt per pitbezoek de pitstraattijd, het stilstaan en de stretch, en stuurt de sessiesoort mee; `0.7.6.5` houdt een bewezen sectortijd
 vast wanneer een tussenframe die sector even niet meestuurt, en toont de laatst gemeten
 pitduur van pit-in tot pit-out als bruto benchmark. `0.7.6.2` voegt de optionele automodelnaam
 per tegenstander toe, uit dezelfde sessiegegevens. Onbekend blijft leeg; een vol

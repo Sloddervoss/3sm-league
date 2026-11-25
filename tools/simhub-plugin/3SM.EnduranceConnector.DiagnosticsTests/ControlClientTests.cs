@@ -119,8 +119,8 @@ internal static class ControlClientTests
         var parsedCapabilities = MeasurementJson.DeserializeDictionary(capabilitiesJson);
         var supported = parsedCapabilities["supported"] as Dictionary<string, object>;
         Check("C15", Convert.ToInt32(parsedCapabilities["revision"]) == 1 && supported != null
-            && supported.Count == 9 && supported.ContainsKey("paceCapture") && supported.ContainsKey("measurementEvents")
-            && supported.ContainsKey("pitVisits")
+            && supported.Count == 10 && supported.ContainsKey("paceCapture") && supported.ContainsKey("measurementEvents")
+            && supported.ContainsKey("pitVisits") && supported.ContainsKey("sectorProgress")
             && supported.ContainsKey("lapSummaries") && supported.ContainsKey("directIrSdk"),
             "capabilities noemen de geïmplementeerde features met een versie");
         Check("C16", supported != null && supported.Values.All(value => value is double)

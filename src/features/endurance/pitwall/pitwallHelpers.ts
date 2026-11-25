@@ -45,7 +45,17 @@ export interface PitwallStrategyRow {
   fuel_to_add_litres: number | null;
 }
 
+export interface SectorProgressRaw {
+  index?: number | null;
+  count?: number | null;
+  elapsedSeconds?: number | null;
+  progressPct?: number | null;
+  learned?: boolean | null;
+}
+
 export interface V3Normalized {
+  /** 0.7.6.7: live sectorklok, afgeleid uit baanpositie (geen SDK-sectortijd). */
+  sectorProgress?: SectorProgressRaw | null;
   paceHistory?: PaceHistory | null;
   capturedAt?: string;
   transportSessionId?: string;

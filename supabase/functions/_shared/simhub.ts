@@ -238,6 +238,20 @@ export type PitVisitBlock = {
   skipped: string | null;
 };
 
+/**
+ * Live sectorklok zoals de connector hem afleidt uit baanpositie. Dit is geen
+ * SDK-sectortijd: het is een afgeleide meting en heet ook zo. Het blok is
+ * optioneel en nooit fataal, zodat een oudere server of een kapotte tick niets
+ * kost behalve het blok zelf.
+ */
+export type SectorProgressBlock = {
+  index: number;
+  count: number;
+  elapsedSeconds: number;
+  progressPct: number;
+  learned: boolean;
+};
+
 export type NormalizedTelemetryEnvelope = {
   protocolVersion: 1 | 2 | 3;
   sequence: number;
@@ -391,6 +405,8 @@ export type NormalizedTelemetryEnvelope = {
    */
   /** 0.7.6.6 — pitbezoeken van deze tick. Nooit fataal; leeg betekent: niets. */
   pitVisits?: PitVisitBlock[] | null;
+  /** 0.7.6.7 — live sectorklok (afgeleid uit baanpositie). Nooit fataal. */
+  sectorProgress?: SectorProgressBlock | null;
   measurementReport?: {
     events: SeriesReport<MeasurementEvent>;
     laps: SeriesReport<LapSummary>;
@@ -486,7 +502,7 @@ const v3SignedGap = (value: unknown, path: string): number | null => {
     value === undefined || value === null ? null : v3Boolean(value, path);
 
 const V3RequiredRootKeys = ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"];
-const V3OptionalRootKeys = ["opponents", "vehicle", "tyres", "brakes", "weather", "source", "schemaRevision", "capabilities", "environment", "measurementEvents", "lapSummaries", "paceCapture", "lapTimes", "pitVisits"];
+const V3OptionalRootKeys = ["opponents", "vehicle", "tyres", "brakes", "weather", "source", "schemaRevision", "capabilities", "environment", "measurementEvents", "lapSummaries", "paceCapture", "lapTimes", "pitVisits", "sectorProgress"];
 
 /**
  * Rootkeys van een V3-frame: de verplichte moeten er zijn, de bekende optionele
@@ -539,6 +555,31 @@ const parsePitVisitsNeverFatal = (input: unknown): PitVisitBlock[] | null => {
     return rows.length ? rows : null;
   } catch (error) {
     console.warn("[ingest] pitVisits-blok afgekeurd:", (error as Error).message);
+    return null;
+  }
+};
+
+const parseSectorProgressNeverFatal = (input: unknown): SectorProgressBlock | null => {
+  if (input === undefined || input === null) return null;
+  try {
+    const block = asRecord(input, "sectorProgress");
+    const count = numberValue(block.count, "sectorProgress.count", { integer: true, min: 1, max: 12 });
+    const index = numberValue(block.index, "sectorProgress.index", { integer: true, min: 1, max: 12 });
+    const elapsedSeconds = numberValue(block.elapsedSeconds, "sectorProgress.elapsedSeconds", { min: 0, max: 3600 });
+    const progressPct = numberValue(block.progressPct, "sectorProgress.progressPct", { min: 0, max: 100 });
+    if (count === null || index === null || elapsedSeconds === null || progressPct === null) {
+      throw new Error("sectorProgress is incomplete");
+    }
+    if (index > count) throw new Error("sectorProgress.index is beyond count");
+    return {
+      index,
+      count,
+      elapsedSeconds,
+      progressPct,
+      learned: block.learned == null ? false : booleanValue(block.learned, "sectorProgress.learned"),
+    };
+  } catch (error) {
+    console.warn("[ingest] sectorProgress-blok afgekeurd:", (error as Error).message);
     return null;
   }
 };
@@ -710,6 +751,7 @@ export const parseTelemetryV3Envelope = (
     capabilities: parseCapabilitiesNeverFatal(root.capabilities),
     environment: parseEnvironmentNeverFatal(root.environment),
     pitVisits: parsePitVisitsNeverFatal(root.pitVisits),
+    sectorProgress: parseSectorProgressNeverFatal(root.sectorProgress),
     measurementEvents: measurementReport.events.rows.length ? measurementReport.events.rows : null,
     lapSummaries: measurementReport.laps.rows.length ? measurementReport.laps.rows : null,
     measurementReport,

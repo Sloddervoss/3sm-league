@@ -65,6 +65,8 @@ namespace ThreeSM.EnduranceConnector
         // Leert per circuit de pitpunten en de stretch; elke afgeronde bezoek gaat
         // één keer mee in het eerstvolgende frame.
         private readonly PitVisitLearner _pitVisits = new PitVisitLearner();
+        private readonly SectorProgressMonitor _sectorProgress = new SectorProgressMonitor();
+        private string _sectorBoundariesKey;
         private readonly List<V3PitVisit> _pendingPitVisits = new List<V3PitVisit>();
         private long _sequence = -1;
         private long _lastQueuedMilliseconds;
@@ -1674,6 +1676,25 @@ namespace ThreeSM.EnduranceConnector
                 if (evidence != null) _pendingPitVisits.Add(ToV3PitVisit(evidence));
             }
 
+            // 0.7.6.7 — live sectorklok uit baanpositie. Grenzen komen bij voorkeur
+            // uit de sessiedata; ontbreken ze, dan leert de monitor ze zelf.
+            var sectorTrackKey = (trackName ?? "unknown") + "|" + (trackConfig ?? string.Empty);
+            if (!string.IsNullOrEmpty(sectorTrackKey) && !string.Equals(sectorTrackKey, _sectorBoundariesKey, StringComparison.OrdinalIgnoreCase))
+            {
+                _sectorBoundariesKey = sectorTrackKey;
+                var published = rawChannels.ReadSectorStarts();
+                var publishedCount = published == null ? 0 : published.Length + 1;
+                _sectorProgress.PublishBoundaries(sectorTrackKey, published, publishedCount);
+            }
+            var sectorProgress = _sectorProgress.Update(
+                sectorTrackKey,
+                currentLapElapsed,
+                lapDistancePct,
+                GetNullableInt(manager, "DataCorePlugin.GameData.NewData.CurrentSectorIndex"),
+                GetNullableInt(manager, "DataCorePlugin.GameData.NewData.SectorsCount"),
+                onPitRoad,
+                completedLaps);
+
             var opponents = BuildOpponentSnapshot(snapshot, rawChannels);
             LogDriverRatingSnapshot(opponents);
 
@@ -1689,6 +1710,16 @@ namespace ThreeSM.EnduranceConnector
                 SchemaRevision = MeasurementContract.SchemaRevision,
                 Capabilities = V3Capabilities.From(ConnectorCapabilities.Implemented()),
                 PitVisits = TakePitVisits(),
+                SectorProgress = sectorProgress.HasValue
+                    ? new V3SectorProgress
+                    {
+                        Index = sectorProgress.Value.Index,
+                        Count = sectorProgress.Value.Count,
+                        ElapsedSeconds = Math.Round(sectorProgress.Value.ElapsedSeconds, 3),
+                        ProgressPct = Math.Round(sectorProgress.Value.ProgressPct, 1),
+                        Learned = sectorProgress.Value.Learned
+                    }
+                    : null,
                 // Herkomst: SimHub-versie en plug-inversie zijn twee verschillende dingen.
                 // Null als er niets te melden is; EmitDefaultValue=false laat de sleutel
                 // dan weg en houdt een 0.7.x-frame byte-identiek.
@@ -1715,7 +1746,7 @@ namespace ThreeSM.EnduranceConnector
                     StartLights = startLights,
                     PitLaneOpen = pitLaneOpen,
                     IsStartSequence = isStartSequence,
-                    SessionType = GetNullableString(manager, "SessionTypeName"),
+                    SessionType = ReadSessionType(manager, rawChannels),
                 },
                 Timing = new V3Timing
                 {
@@ -2875,6 +2906,25 @@ namespace ThreeSM.EnduranceConnector
             if (string.IsNullOrWhiteSpace(body)) return null;
             var serializer = new DataContractJsonSerializer(typeof(T));
             using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(body))) return serializer.ReadObject(stream) as T;
+        }
+
+        /// <summary>
+        /// Sessiesoort met de paden die SimHub echt kent. Het kale "SessionTypeName"
+        /// bestaat niet als property-pad en gaf altijd null, waardoor de leerketen
+        /// niets kon toeschrijven. Volgorde: officiële SDK-property, dan NewData,
+        /// dan de ruwe iRacing-kanalen.
+        /// </summary>
+        private static string ReadSessionType(PluginManager manager, RawChannelReader rawChannels)
+        {
+            var value = GetNullableString(manager, "DataCorePlugin.GameData.SessionTypeName")
+                ?? GetNullableString(manager, "DataCorePlugin.GameData.NewData.SessionTypeName")
+                ?? (rawChannels == null ? null : rawChannels.ReadText("SessionTypeName"))
+                ?? (rawChannels == null ? null : rawChannels.ReadText("SessionType"));
+            if (value == null) return null;
+            // iRacing levert "Offline Testing" en "Lone Qualify"; de leerketen wil de
+            // soort letterlijk, dus alleen trimmen en de lengte begrenzen.
+            value = value.Trim();
+            return value.Length > 32 ? value.Substring(0, 32) : value;
         }
 
         private static object GetRaw(PluginManager manager, string property) { if (manager == null || string.IsNullOrWhiteSpace(property)) return null; try { return manager.GetPropertyValue(property); } catch { return null; } }
