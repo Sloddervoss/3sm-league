@@ -62,6 +62,10 @@ namespace ThreeSM.EnduranceConnector
         private readonly SessionTelemetryReader _sessionTime = new SessionTelemetryReader();
         // 0.7.0: onthoudt de laatst gezien wear/karkas en bevriest die op de pit-entry-flank.
         private readonly TyreSnapshotTracker _tyreTracker = new TyreSnapshotTracker();
+        // Leert per circuit de pitpunten en de stretch; elke afgeronde bezoek gaat
+        // één keer mee in het eerstvolgende frame.
+        private readonly PitVisitLearner _pitVisits = new PitVisitLearner();
+        private readonly List<V3PitVisit> _pendingPitVisits = new List<V3PitVisit>();
         private long _sequence = -1;
         private long _lastQueuedMilliseconds;
         private int _sendBusy;
@@ -1564,6 +1568,32 @@ namespace ThreeSM.EnduranceConnector
             else if ((bf & 0x20000000u) != 0u) { startLights = 1; isStartSequence = true; }
         }
 
+        /// <summary>
+        /// Neemt de afgeronde pitbezoeken mee in dit frame en maakt de lijst leeg.
+        /// Een bezoek gaat dus één keer over de lijn; de server bewaart het of niet.
+        /// </summary>
+        private List<V3PitVisit> TakePitVisits()
+        {
+            if (_pendingPitVisits.Count == 0) return null;
+            var visits = new List<V3PitVisit>(_pendingPitVisits);
+            _pendingPitVisits.Clear();
+            return visits;
+        }
+
+        private static V3PitVisit ToV3PitVisit(PitVisitEvidence evidence)
+        {
+            return new V3PitVisit
+            {
+                EntryPct = evidence.EntryPct,
+                ExitPct = evidence.ExitPct,
+                LaneSeconds = evidence.LaneSeconds,
+                StandingSeconds = evidence.StandingSeconds,
+                StretchSeconds = evidence.StretchSeconds,
+                Jumped = evidence.Jumped,
+                Skipped = evidence.Skipped,
+            };
+        }
+
         internal TelemetryEnvelopeV3 CaptureV3(PluginManager manager, GameData data, bool isInCar, out DiagnosticsObservation diagnosticObservation)
         {
             var snapshot = data.NewData;
@@ -1628,6 +1658,22 @@ namespace ThreeSM.EnduranceConnector
             var rawChannels = new RawChannelReader(snapshot, property => GetRaw(manager, property));
             var onPitRoad = CaptureValueRules.OnPitRoad(rawChannels.ReadBool("OnPitRoad"), inPitLaneProperty);
 
+            // Pitbezoek-leren. Alleen bij een echte waarneming van de pitstraat,
+            // baanpositie en sessietijd; ontbreekt er één, dan blijft de toestand
+            // staan zoals hij was in plaats van een verzonnen overgang te maken.
+            var pitTrackKey = (trackName ?? "unknown") + "|" + (trackConfig ?? string.Empty);
+            _pitVisits.BeginTrack(pitTrackKey);
+            var lapDistance = NormalizeLapDist(lapDistancePct);
+            if (onPitRoad.HasValue && lapDistance.HasValue && sessionTimeSeconds.HasValue)
+            {
+                var evidence = _pitVisits.Update(
+                    sessionTimeSeconds.Value,
+                    lapDistance.Value,
+                    GetDouble(manager, Settings.SpeedProperty, 0),
+                    onPitRoad.Value);
+                if (evidence != null) _pendingPitVisits.Add(ToV3PitVisit(evidence));
+            }
+
             var opponents = BuildOpponentSnapshot(snapshot, rawChannels);
             LogDriverRatingSnapshot(opponents);
 
@@ -1642,6 +1688,7 @@ namespace ThreeSM.EnduranceConnector
                 // lapSummaries) komen uit de outbox bij het verzenden.
                 SchemaRevision = MeasurementContract.SchemaRevision,
                 Capabilities = V3Capabilities.From(ConnectorCapabilities.Implemented()),
+                PitVisits = TakePitVisits(),
                 // Herkomst: SimHub-versie en plug-inversie zijn twee verschillende dingen.
                 // Null als er niets te melden is; EmitDefaultValue=false laat de sleutel
                 // dan weg en houdt een 0.7.x-frame byte-identiek.
@@ -1668,6 +1715,7 @@ namespace ThreeSM.EnduranceConnector
                     StartLights = startLights,
                     PitLaneOpen = pitLaneOpen,
                     IsStartSequence = isStartSequence,
+                    SessionType = GetNullableString(manager, "SessionTypeName"),
                 },
                 Timing = new V3Timing
                 {

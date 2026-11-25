@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -519,6 +519,7 @@ internal static class FaseDTests
             baselineChecks += Group("LiveSectorUpdateTests", () => LiveSectorUpdateTests.Run(Check));
               baselineChecks += Group("PaceSourceSelectionTests", () => PaceSourceSelectionTests.Run(Check));
               baselineChecks += Group("LapAttributionTests", () => LapAttributionTests.Run(Check));
+            baselineChecks += Group("PitVisitLearnerTests", () => PitVisitLearnerTests.Run(Check));
             baselineChecks += Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
             baselineChecks += Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
             baselineChecks += Group("MeasurementPitEdgeTests", () => MeasurementPitEdgeTests.Run(Check));

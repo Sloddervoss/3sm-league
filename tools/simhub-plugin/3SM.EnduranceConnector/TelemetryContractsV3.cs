@@ -18,6 +18,13 @@ namespace ThreeSM.EnduranceConnector
         /// afsluiten en waarvoor de tijd binnenkwam; de server voegt niets samen.
         /// </summary>
         [DataMember(Name = "lapTimes", Order = 20, EmitDefaultValue = false)] public List<LapTimeDto> LapTimes { get; set; }
+        /// <summary>
+        /// 0.7.6.6 additief — afgeronde pitbezoeken met de feiten die de server nodig
+        /// heeft om pitverlies te leren: entry/exit-positie, tijd in de pitstraat,
+        /// stilstaan en de stretch (rijtijd van dat stuk baan op racetempo). Leeg of
+        /// afwezig betekent: deze connector levert geen pitbezoeken.
+        /// </summary>
+        [DataMember(Name = "pitVisits", Order = 21, EmitDefaultValue = false)] public List<V3PitVisit> PitVisits { get; set; }
         [DataMember(Name = "protocolVersion", Order = 1)] public int ProtocolVersion { get; set; }
         [DataMember(Name = "sequence", Order = 2)] public long Sequence { get; set; }
         [DataMember(Name = "capturedAt", Order = 3)] public string CapturedAt { get; set; }
@@ -65,6 +72,7 @@ namespace ThreeSM.EnduranceConnector
     public sealed class V3Capabilities
     {
         [DataMember(Name = "paceCapture", Order = 9, EmitDefaultValue = false)] public int? PaceCapture { get; set; }
+        [DataMember(Name = "pitVisits", Order = 10, EmitDefaultValue = false)] public int? PitVisits { get; set; }
         [DataMember(Name = "revision", Order = 1)] public int Revision { get; set; }
         [DataMember(Name = "pitService", Order = 2, EmitDefaultValue = false)] public int? PitService { get; set; }
         [DataMember(Name = "wearObservation", Order = 3, EmitDefaultValue = false)] public int? WearObservation { get; set; }
@@ -91,6 +99,7 @@ namespace ThreeSM.EnduranceConnector
                     case "lapSummaries": result.LapSummaries = pair.Value; break;
                     case "environment": result.Environment = pair.Value; break;
                     case "paceCapture": result.PaceCapture = pair.Value; break;
+                    case "pitVisits": result.PitVisits = pair.Value; break;
                 }
             }
             return result;
@@ -312,6 +321,8 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "startLights", Order = 10, EmitDefaultValue = false)] public int? StartLights { get; set; }
         [DataMember(Name = "pitLaneOpen", Order = 11, EmitDefaultValue = false)] public bool? PitLaneOpen { get; set; }
         [DataMember(Name = "isStartSequence", Order = 12, EmitDefaultValue = false)] public bool IsStartSequence { get; set; }
+        /// <summary>0.7.6.6 additief: sessiesoort (Race/Practice/Qualifying/Test). Leeg als onbekend.</summary>
+        [DataMember(Name = "sessionType", Order = 13, EmitDefaultValue = false)] public string SessionType { get; set; }
     }
 
     [DataContract]
@@ -376,5 +387,22 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "lap", Order = 3)] public int Lap { get; set; }
         [DataMember(Name = "seconds", Order = 4)] public double Seconds { get; set; }
         [DataMember(Name = "source", Order = 5)] public string Source { get; set; }
+    }
+
+    /// <summary>
+    /// Eén afgerond pitbezoek zoals de connector het zag. <see cref="Skipped"/> is
+    /// gevuld als het bezoek niet als meting mag tellen (tow, verkeerde uiteinden,
+    /// te langzaam door de pitstraat); de server bewaart zulke bezoeken niet.
+    /// </summary>
+    [DataContract]
+    public sealed class V3PitVisit
+    {
+        [DataMember(Name = "entryPct", Order = 1)] public double EntryPct { get; set; }
+        [DataMember(Name = "exitPct", Order = 2)] public double ExitPct { get; set; }
+        [DataMember(Name = "laneSeconds", Order = 3)] public double LaneSeconds { get; set; }
+        [DataMember(Name = "standingSeconds", Order = 4)] public double StandingSeconds { get; set; }
+        [DataMember(Name = "stretchSeconds", Order = 5, EmitDefaultValue = false)] public double? StretchSeconds { get; set; }
+        [DataMember(Name = "jumped", Order = 6, EmitDefaultValue = false)] public bool Jumped { get; set; }
+        [DataMember(Name = "skipped", Order = 7, EmitDefaultValue = false)] public string Skipped { get; set; }
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -44,7 +44,8 @@ namespace ThreeSM.EnduranceConnector
                     { "measurementEvents", 1 },
                     { "lapSummaries", 1 },
                     { "environment", 1 },
-                    { "paceCapture", 1 }
+                    { "paceCapture", 1 },
+                    { "pitVisits", 1 }
                 });
         }
 
