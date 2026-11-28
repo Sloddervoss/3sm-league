@@ -9,6 +9,7 @@ import {
 } from 'discord.js';
 import { createClient } from '@supabase/supabase-js';
 import cron from 'node-cron';
+import { createCalendarMessageUpdater } from './calendarMessage.js';
 import { createGuardedRunner, formatDuration, withTimeout } from './cronGuard.js';
 import { beslisRollback, publiceerCorrectie } from './corrections.js';
 import { createSupabaseStep } from './supabaseStep.js';
@@ -616,12 +617,6 @@ async function getStewardChannel() {
   return client.channels.fetch(channelId).catch(() => null);
 }
 
-async function getCalendarChannel() {
-  const cfg = loadConfig();
-  if (!cfg.kalender_channel_id) return null;
-  return client.channels.fetch(cfg.kalender_channel_id).catch(() => null);
-}
-
 // `gooiFout: true` laat een netwerkfout door naar de aanroeper. De team-sync
 // heeft dat nodig om 'geen guild geconfigureerd' te onderscheiden van 'de guild
 // kon niet geladen worden' (tot 2026-10-28 werd een ETIMEDOUT hier als 'geen
@@ -1002,26 +997,12 @@ async function buildCalendarEmbed() {
     .setTimestamp();
 }
 
-async function updateCalendarEmbed() {
-  const ch = await getCalendarChannel();
-  if (!ch) return;
-
-  const cfg = loadConfig();
-  const embed = await buildCalendarEmbed();
-
-  if (cfg.kalender_message_id) {
-    try {
-      const msg = await ch.messages.fetch(cfg.kalender_message_id);
-      await msg.edit({ embeds: [embed] });
-      return;
-    } catch {
-      // bericht bestaat niet meer, maak nieuw aan
-    }
-  }
-
-  const msg = await ch.send({ embeds: [embed] });
-  saveConfig({ kalender_message_id: msg.id });
-}
+const updateCalendarEmbed = createCalendarMessageUpdater({
+  loadConfig,
+  saveConfig,
+  fetchChannel: id => client.channels.fetch(id),
+  buildEmbed: buildCalendarEmbed,
+});
 
 // ── Cron: upcoming (24h/1h/15m) ──────────────────────────────────────────────
 async function checkUpcoming() {

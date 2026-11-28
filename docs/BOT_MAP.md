@@ -219,3 +219,7 @@ Startup also registers commands and runs initial checks/syncs.
 
 - Exact live Discord channel/role IDs are environment state, not derivable safely from repo alone.
 - Exact live service status/logs require production inspection; this doc maps repo behavior.
+
+### Vast kalenderbericht
+
+De uurlijkse taak en de starttaak delen één updater. Bewaar `kalender_message_id` in de runtime-config. Een mislukte bewerking maakt nooit een nieuw bericht. Vervang een opgeslagen bericht alleen na een verse Discord-read met HTTP 404 én code 10008. Herstel bij duplicaten eerst het originele ID en verifieer een live edit voordat je de kopie verwijdert.
